@@ -1,0 +1,13 @@
+{
+  "name": "telegram-bridge",
+  "version": "0.9.11",
+  "description": "Telegram bot bridge for PM agent — seamless remote access via task-router",
+  "type": "module",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "node-telegram-bot-api": "^0.66.0"
+  }
+}
