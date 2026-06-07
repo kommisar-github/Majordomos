@@ -1,0 +1,12 @@
+# secrets — never commit
+.env
+*.env
+*token*
+*secret*
+fleet/*.secret.json
+# resolved-token half of fleet config (committed file carries only tokenRef)
+fleet/fleet.local.json
+# runtime
+.claude/mcp/task-router/*.db
+*.log
+node_modules/

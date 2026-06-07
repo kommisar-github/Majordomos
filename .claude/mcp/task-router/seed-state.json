@@ -1,0 +1,5 @@
+{
+  "seed_version": "4.9",
+  "bootstrapped_at": "2026-06-07T18:51:47Z",
+  "_note": "Records the PM_TEMPLATES.md version this project was last bootstrapped from. The errata channel uses this to auto-ack errata whose applies_to_seed_versions range excludes this version. Re-run init.sh to bump after pulling a newer seed."
+}

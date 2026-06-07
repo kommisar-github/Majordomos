@@ -1,0 +1,6 @@
+{
+  "pm":      { "capabilities": ["planning", "delegation", "tracking", "doc-updates"], "role": "coordinator" },
+  "arch":    { "capabilities": ["phase-design", "system-architecture", "api-design"], "role": "specialist" },
+  "review":  { "capabilities": ["architecture-audit", "challenge-decisions", "code-review"], "role": "specialist" },
+  "scm":     { "capabilities": ["git", "commits", "branches", "push", "prs"], "role": "specialist" }
+}

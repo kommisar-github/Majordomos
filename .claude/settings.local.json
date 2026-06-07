@@ -1,0 +1,75 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -f .claude/mcp/task-router/start.sh ] && bash .claude/mcp/task-router/start.sh; true",
+            "timeout": 10,
+            "statusMessage": "Starting task-router MCP server..."
+          },
+          {
+            "type": "command",
+            "command": "if [ -n \"$TASK_ROUTER_AGENT\" ]; then curl -sf \"http://127.0.0.1:3100/memories?agent=$TASK_ROUTER_AGENT&project=$TASK_ROUTER_PROJECT&format=text\" 2>/dev/null; fi; true",
+            "timeout": 5,
+            "statusMessage": "Loading agent memory..."
+          },
+          {
+            "type": "command",
+            "command": "[ -f memory/MEMORY.md ] && { echo '# Project auto-memory (memory/MEMORY.md) — repo is the single source of truth'; cat memory/MEMORY.md; }; true",
+            "timeout": 5,
+            "statusMessage": "Loading project memory (memory/MEMORY.md)..."
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -n \"$TASK_ROUTER_AGENT\" ]; then curl -sf \"http://127.0.0.1:3100/hook/check?agent=$TASK_ROUTER_AGENT&project=$TASK_ROUTER_PROJECT\" 2>/dev/null; fi; true",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:3100/hook/stop",
+            "headers": {
+              "X-Task-Router-Agent": "$TASK_ROUTER_AGENT",
+              "X-Task-Router-Project": "$TASK_ROUTER_PROJECT"
+            },
+            "allowedEnvVars": ["TASK_ROUTER_AGENT", "TASK_ROUTER_PROJECT"],
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:3100/hook/stop",
+            "headers": {
+              "X-Task-Router-Agent": "$TASK_ROUTER_AGENT",
+              "X-Task-Router-Project": "$TASK_ROUTER_PROJECT"
+            },
+            "allowedEnvVars": ["TASK_ROUTER_AGENT", "TASK_ROUTER_PROJECT"],
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
