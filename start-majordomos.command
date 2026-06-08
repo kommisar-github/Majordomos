@@ -2,9 +2,13 @@
 # start-majordomos.command — macOS double-clickable launcher that starts the Claude
 # Task Router standalone host for THIS project (Majordomos).
 #
-# It lives in the Majordomos repo, so the project root is simply this script's folder —
-# nothing to configure for the project. It only needs to find your separate
-# `claude-task-router` checkout (which contains the standalone app, mcp-task-router-app).
+# Self-contained: the project root is this script's own folder, and the host is invoked
+# as the installed `task-router-app` command — exactly like this project already depends
+# on `node`, `git`, and `claude`. There are NO references to any task-router source repo.
+#
+# One-time install of the host command (from your claude-task-router checkout):
+#   npm install -g ./mcp-task-router-app        # or, for dev:  cd mcp-task-router-app && npm link
+# (`task-router-app` is the bin declared by mcp-task-router-app/package.json.)
 #
 # Usage:
 #   • Finder: double-click. First time, right-click → Open to clear Gatekeeper,
@@ -23,39 +27,18 @@ OPEN_BROWSER=1              # 1 = open the dashboard in your browser once it's u
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$SCRIPT_DIR"  # this script sits at the Majordomos repo root
 
-# ============================ EDIT ME (only if auto-detect fails) ============================
-# Path to your claude-task-router checkout — the repo that holds
-# mcp-task-router-app/bin/app.js. Leave blank to auto-detect (sibling of this repo,
-# then common macOS / OneDrive paths).
-TASK_ROUTER_DIR="${TASK_ROUTER_DIR:-}"     # e.g. "$HOME/Documents/GitHub/claude-task-router"
-# ============================================================================================
-
 command -v node >/dev/null 2>&1 || { echo "node not found on PATH. Install Node.js >= 18 (e.g. 'brew install node')." >&2; exit 1; }
 
-# ---- RESOLVE the standalone app entry (bin/app.js in the claude-task-router checkout) ----
-CANDIDATES=()
-[ -n "${TASK_ROUTER_DIR:-}" ] && CANDIDATES+=("$TASK_ROUTER_DIR")
-CANDIDATES+=(
-  "$(dirname "$PROJECT_ROOT")/claude-task-router"     # sibling checkout (the usual layout)
-  "$HOME/Library/CloudStorage/OneDrive-HomeOffice/MyProjects/GitHub/claude-task-router"
-  "$HOME/Library/CloudStorage/OneDrive-Personal/MyProjects/GitHub/claude-task-router"
-  "$HOME/OneDrive - Home Office/MyProjects/GitHub/claude-task-router"
-  "$HOME/MyProjects/GitHub/claude-task-router"
-  "$HOME/GitHub/claude-task-router"
-  "$HOME/Projects/claude-task-router"
-  "$HOME/claude-task-router"
-)
-
-ENTRY=""
-for c in "${CANDIDATES[@]}"; do
-  if [ -f "$c/mcp-task-router-app/bin/app.js" ]; then ENTRY="$c/mcp-task-router-app/bin/app.js"; break; fi
-done
-
-if [ -z "$ENTRY" ]; then
-  echo "Could not find your claude-task-router checkout (mcp-task-router-app/bin/app.js). Tried:" >&2
-  for c in "${CANDIDATES[@]}"; do echo "  - $c/mcp-task-router-app/bin/app.js" >&2; done
-  echo "Set TASK_ROUTER_DIR (in the EDIT ME block or the environment) to the checkout path, e.g.:" >&2
-  echo "  TASK_ROUTER_DIR=\"\$HOME/path/to/claude-task-router\" \"$0\"" >&2
+# The host command. Defaults to the installed `task-router-app`; override with a command
+# name or an absolute path to bin/app.js if you haven't installed it:
+#   TASK_ROUTER_APP="/abs/path/to/mcp-task-router-app/bin/app.js" ./start-majordomos.command
+APP_CMD="${TASK_ROUTER_APP:-task-router-app}"
+if ! command -v "$APP_CMD" >/dev/null 2>&1; then
+  echo "The standalone host command ('$APP_CMD') was not found on PATH." >&2
+  echo "Install it once from your claude-task-router checkout:" >&2
+  echo "  npm install -g ./mcp-task-router-app        # or:  cd mcp-task-router-app && npm link" >&2
+  echo "Or point TASK_ROUTER_APP at the entry for this run:" >&2
+  echo "  TASK_ROUTER_APP=\"/abs/path/to/mcp-task-router-app/bin/app.js\" \"$0\"" >&2
   exit 1
 fi
 
@@ -65,7 +48,6 @@ fi
 
 echo "Majordomos host → http://127.0.0.1:$UI_PORT  (server :$PORT)"
 echo "Project root    → $PROJECT_ROOT"
-echo "App entry       → $ENTRY"
 
 # Optionally pop the dashboard once the UI port answers (backgrounded; never blocks).
 if [ "${OPEN_BROWSER:-0}" = "1" ] && command -v open >/dev/null 2>&1; then
@@ -75,4 +57,4 @@ if [ "${OPEN_BROWSER:-0}" = "1" ] && command -v open >/dev/null 2>&1; then
     done ) &
 fi
 
-exec node "$ENTRY" --project "$PROJECT_NAME=$PROJECT_ROOT" --port "$PORT" --ui-port "$UI_PORT"
+exec "$APP_CMD" --project "$PROJECT_NAME=$PROJECT_ROOT" --port "$PORT" --ui-port "$UI_PORT"
