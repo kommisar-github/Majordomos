@@ -56,19 +56,6 @@ if [ -z "$APP" ] || [ ! -f "$APP" ]; then
   exit 1
 fi
 
-# First-use prerequisites: the VSIX ships the app WITHOUT the native node-pty (its ABI
-# must match the system Node), so install it for this platform the first time. node-pty
-# powers the headless agent terminals; if it can't be built (no prebuild + no toolchain)
-# we still launch — the supervisor reports it cleanly and the rest of the app works.
-APP_DIR="$(dirname "$(dirname "$APP")")"
-if ! ( cd "$APP_DIR" 2>/dev/null && node -e "require('node-pty')" >/dev/null 2>&1 ); then
-  if [ -f "$APP_DIR/scripts/setup-app.sh" ]; then
-    echo "First run: installing headless-terminal prerequisites (node-pty) for this platform…"
-    bash "$APP_DIR/scripts/setup-app.sh" --install || \
-      echo "  (prerequisite install reported issues — continuing; agent terminals may be unavailable)" >&2
-  fi
-fi
-
 echo "majordomos host -> http://127.0.0.1:$UI_PORT  (app: $APP)"
 if [ "${RESTART_SERVER:-}" = "1" ]; then
   exec node "$APP" --project "$PROJECT_NAME=$PROJECT_ROOT" --ui-port "$UI_PORT" --restart-server "$@"

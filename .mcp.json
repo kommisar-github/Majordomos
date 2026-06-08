@@ -3,6 +3,13 @@
     "task-router": {
       "type": "http",
       "url": "http://127.0.0.1:3100/mcp?project=majordomos"
+    },
+    "home-assistant": {
+      "type": "sse",
+      "url": "${HA_BASE_URL}/mcp_server/sse",
+      "headers": {
+        "Authorization": "Bearer ${HA_TOKEN}"
+      }
     }
   }
 }
