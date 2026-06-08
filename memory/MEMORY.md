@@ -9,7 +9,7 @@ Canonical project facts (architecture, decisions, failure modes) belong in
 
 ## Files
 
-(none yet — add memory files here and index them, one line each, as work accrues)
+- [HA MCP integration](ha-mcp-integration.md) — how Majordomus connects to Home Assistant (official HA MCP Server, SSE); wiring done, what's left
 
 ## Update protocol
 

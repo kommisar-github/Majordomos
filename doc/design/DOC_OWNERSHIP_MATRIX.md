@@ -2,7 +2,7 @@
 
 **Purpose:** Maps every design / implementation / reference document in the majordomos project to the specialist agent(s) responsible for it. Agents read their assigned docs when dispatched; PM uses this matrix to pick the right delegate.
 
-**Last Updated:** 2026-06-07
+**Last Updated:** 2026-06-09
 **Maintained By:** `/pm`
 
 ## Abstract
@@ -45,9 +45,15 @@
 | `ROADMAP.md` | roadmap | `/pm` | all | Phase overview + status badges. PM must read before planning. |
 | `NEXT_STEPS.md` | roadmap | `/pm` | all | Current action items. PM updates after each implement/verify cycle. |
 | `MEMORY.md` | memory | `/pm` | all | Project state — architecture facts, cross-cutting decisions. |
-| `DOC_OWNERSHIP_MATRIX.md` | reference | `/pm` | all | **This file.** |
-| `DESIGN_<FEATURE>.md` | design | `/<agent>` | `/<other>` | <one-line purpose> |
-| `<REFERENCE>.md` | reference | `/<agent>` | — | <one-line purpose> |
+| `DOC_OWNERSHIP_MATRIX.md` | reference | `/pm` | all | **This file.** (lives in `doc/design/`) |
+| `design/ha_integration.md` | design | `/ha` | `/pm` | HA bidirectional bridge design; Q-HA-TRANSPORT resolved → official HA MCP Server (SSE). |
+| `pm_GUIDELINES.md` | reference | `/pm` | — | Durable per-agent guidelines for `/pm`. Write on explicit request only. |
+| `arch_GUIDELINES.md` | reference | `/arch` | `/pm` | Durable per-agent guidelines for `/arch`. |
+| `review_GUIDELINES.md` | reference | `/review` | `/pm` | Durable per-agent guidelines for `/review`. |
+| `scm_GUIDELINES.md` | reference | `/scm` | `/pm` | Durable per-agent guidelines for `/scm`. |
+| `ha_GUIDELINES.md` | reference | `/ha` | `/pm` | Durable per-agent guidelines for `/ha`. |
+| `app_GUIDELINES.md` | reference | `/app` | `/pm` | Durable per-agent guidelines for `/app`. |
+| `ops_GUIDELINES.md` | reference | `/ops` | `/pm` | Durable per-agent guidelines for `/ops`. |
 
 ---
 
