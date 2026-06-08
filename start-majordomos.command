@@ -28,19 +28,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$SCRIPT_DIR"  # this script sits at the Majordomos repo root
 
 command -v node >/dev/null 2>&1 || { echo "node not found on PATH. Install Node.js >= 18 (e.g. 'brew install node')." >&2; exit 1; }
-
-# The host command. Defaults to the installed `task-router-app`; override with a command
-# name or an absolute path to bin/app.js if you haven't installed it:
-#   TASK_ROUTER_APP="/abs/path/to/mcp-task-router-app/bin/app.js" ./start-majordomos.command
-APP_CMD="${TASK_ROUTER_APP:-task-router-app}"
-if ! command -v "$APP_CMD" >/dev/null 2>&1; then
-  echo "The standalone host command ('$APP_CMD') was not found on PATH." >&2
-  echo "Install it once from your claude-task-router checkout:" >&2
-  echo "  npm install -g ./mcp-task-router-app        # or:  cd mcp-task-router-app && npm link" >&2
-  echo "Or point TASK_ROUTER_APP at the entry for this run:" >&2
-  echo "  TASK_ROUTER_APP=\"/abs/path/to/mcp-task-router-app/bin/app.js\" \"$0\"" >&2
+command -v task-router-app >/dev/null 2>&1 || {
+  echo "'task-router-app' is not on PATH. Install the standalone host once:" >&2
+  echo "  npm install -g <your claude-task-router checkout>/mcp-task-router-app   # or: npm link" >&2
   exit 1
-fi
+}
 
 if [ ! -f "$PROJECT_ROOT/.claude/mcp/task-router/agents.json" ]; then
   echo "warning: $PROJECT_ROOT is not bootstrapped (no .claude/mcp/task-router/agents.json) — the roster will be empty." >&2
@@ -57,4 +49,4 @@ if [ "${OPEN_BROWSER:-0}" = "1" ] && command -v open >/dev/null 2>&1; then
     done ) &
 fi
 
-exec "$APP_CMD" --project "$PROJECT_NAME=$PROJECT_ROOT" --port "$PORT" --ui-port "$UI_PORT"
+exec task-router-app --project "$PROJECT_NAME=$PROJECT_ROOT" --port "$PORT" --ui-port "$UI_PORT"
