@@ -1,0 +1,4 @@
+# Shell launchers must stay LF so the shebang works on macOS / Linux
+# (a CRLF first line breaks `#!/usr/bin/env bash`).
+*.command text eol=lf
+*.sh      text eol=lf
