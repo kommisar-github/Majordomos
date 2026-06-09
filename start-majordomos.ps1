@@ -1,29 +1,23 @@
-# start-majordomos.ps1 — launch the headless Task Router host for this project
+# start-Majordomos.ps1 — launch the headless Task Router host for this project
 # on Windows, using the app bundled inside your installed Task Router extension. No
 # per-project server/app copy: the app finds the extension's bundled server and starts
 # a shared, detached :3100 server if one isn't already up.
 #
-#   Right-click -> Run with PowerShell, or:   pwsh -File .\start-majordomos.ps1
-#   Second project on its own UI port:         $env:UI_PORT=3201; .\start-majordomos.ps1
-#   Restart the shared server on start:        .\start-majordomos.ps1 -RestartServer
+#   Right-click -> Run with PowerShell, or:   pwsh -File .\start-Majordomos.ps1
+#   Second project on its own UI port:         $env:UI_PORT=3201; .\start-Majordomos.ps1
+#   Restart the shared server on start:        .\start-Majordomos.ps1 -RestartServer
 #   No-IDE box: set $env:TASK_ROUTER_APP to ...\app\bin\app.js
+#   Remote access (default local-only): bind to a LAN IP or 0.0.0.0. The server's
+#   remote surface is /api/federation/* (grant tokens) + /health only; the
+#   dashboard (UI host) has NO auth, so use a trusted network only:
+#     $env:TASK_ROUTER_HOST='0.0.0.0'; $env:TASK_ROUTER_UI_HOST='0.0.0.0'; .\start-Majordomos.ps1
 param([switch]$RestartServer)
 $ErrorActionPreference = 'Stop'
 $ProjectRoot = $PSScriptRoot
-$ProjectName = 'majordomos'
+$ProjectName = 'Majordomos'
 $UiPort = if ($env:UI_PORT) { $env:UI_PORT } else { '3200' }
-
-# Load repo-root .env into the process environment so ${VAR} references in .mcp.json
-# (e.g. HA_BASE_URL / HA_TOKEN) resolve at MCP-connection time. Claude Code expands
-# ${VAR} from the process environment only — it does not read .env itself.
-$envFile = Join-Path $ProjectRoot '.env'
-if (Test-Path $envFile) {
-  Get-Content $envFile | ForEach-Object {
-    if ($_ -match '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$') {
-      [System.Environment]::SetEnvironmentVariable($Matches[1], $Matches[2].Trim(), 'Process')
-    }
-  }
-}
+$BindHost = if ($env:TASK_ROUTER_HOST) { $env:TASK_ROUTER_HOST } else { '127.0.0.1' }      # router server bind
+$UiHost   = if ($env:TASK_ROUTER_UI_HOST) { $env:TASK_ROUTER_UI_HOST } else { '127.0.0.1' } # dashboard bind (NO auth)
 
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
   Write-Error 'node not found on PATH. Install Node.js >= 18.'; exit 1
@@ -57,22 +51,29 @@ if (-not $App -or -not (Test-Path $App)) {
   exit 1
 }
 
-# First-use prerequisites: the VSIX ships the app WITHOUT the native node-pty (its ABI
-# must match the system Node), so install it for this platform the first time. node-pty
-# powers the headless agent terminals; if it can't be built we still launch — the
-# supervisor reports it cleanly and the rest of the app works.
+# First-use prerequisites: node-pty (the headless agent-terminal driver) is a SYSTEM
+# dependency installed once with `npm install -g`, NOT bundled in the VSIX - so it survives
+# extension updates. If it doesn't resolve from the global npm root, run the bundled installer
+# once. If it can't be installed we still launch - the supervisor reports it cleanly.
 $AppDir = Split-Path -Parent (Split-Path -Parent $App)
-Push-Location $AppDir; node -e "require('node-pty')" 2>$null; $ptyOk = ($LASTEXITCODE -eq 0); Pop-Location
+$gRoot = ""; try { $gRoot = (npm root -g 2>$null | Out-String).Trim() } catch {}
+$uRoot = Join-Path $env:USERPROFILE '.claude-task-router\native\node_modules'   # no-admin fallback
+$ptyOk = $false
+if ($gRoot) { node -e "require('$(( $gRoot -replace '\\','/' ))/node-pty')" 2>$null; $ptyOk = ($LASTEXITCODE -eq 0) }
+if (-not $ptyOk) { node -e "require('$(( $uRoot -replace '\\','/' ))/node-pty')" 2>$null; $ptyOk = ($LASTEXITCODE -eq 0) }
 if (-not $ptyOk) {
   $setup = Join-Path $AppDir 'scripts\setup-app.ps1'
   if (Test-Path $setup) {
-    Write-Host "First run: installing headless-terminal prerequisites (node-pty) for this platform..."
+    Write-Host "First run: installing headless-terminal prerequisites (node-pty, global)..."
     try { & $setup -Install }
     catch { Write-Warning "prerequisite install reported issues - continuing; agent terminals may be unavailable" }
   }
 }
 
-$cliArgs = @('--project', "$ProjectName=$ProjectRoot", '--ui-port', "$UiPort")
+$cliArgs = @('--project', "$ProjectName=$ProjectRoot", '--ui-port', "$UiPort", '--host', $BindHost, '--ui-host', $UiHost)
 if ($RestartServer -or $env:RESTART_SERVER -eq '1') { $cliArgs += '--restart-server' }
-Write-Host "majordomos host -> http://127.0.0.1:$UiPort  (app: $App)"
+$UiUrlHost = if ($UiHost -eq '0.0.0.0') { '<this-host-ip>' } else { $UiHost }
+Write-Host "Majordomos host -> http://${UiUrlHost}:$UiPort  (app: $App)"
+if ($BindHost -ne '127.0.0.1') { Write-Host "  remote federation enabled on ${BindHost}:3100 - callers need a grant token (trtok_...); open the firewall port." -ForegroundColor Yellow }
+if ($UiHost -ne '127.0.0.1') { Write-Host "  WARNING: dashboard exposed on $UiHost with NO auth - trusted network only." -ForegroundColor Red }
 & node $App @cliArgs @args

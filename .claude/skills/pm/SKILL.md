@@ -145,6 +145,20 @@ fulfill the operation:
   fine-tuning (inject the right Context docs), then return the specialist's
   result.
 
+**Fleet requests — `Requested agent: pm (FLEET)`.** When the named agent is
+**you (`pm`)**, the caller holds a **fleet grant**: access to your **entire
+roster**, not one specialist. Same RO/RW/RWE levels, fleet scope — and you are
+still the gate (decline or scope down anything unsafe; say why):
+
+- **read_guidelines (RO)** → return data you **already hold**, aggregated across
+  the fleet (any agent's GUIDELINES, accumulated knowledge, current fleet/task
+  status). Read-only — do **not** start new work or dispatch tasks.
+- **write_guidelines (RW)** → **initiate a knowledge update across the fleet**:
+  route the payload through your normal review-gated consolidation to the
+  relevant agents' GUIDELINES (back up; cite the caller). Knowledge capture only.
+- **execute (RWE)** → **full fleet delegation**: carry out the payload by
+  dispatching to whichever agents are needed, and return the consolidated result.
+
 Always attribute the external caller in your result, and complete the task
 normally (`submit_result` / `complete_task`) so the caller's federation
 long-poll resolves. Never expose an agent or doc the request didn't name.

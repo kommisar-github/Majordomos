@@ -7,6 +7,8 @@ fleet/*.secret.json
 # resolved-token half of fleet config (committed file carries only tokenRef)
 fleet/fleet.local.json
 # runtime
-.claude/mcp/task-router/*.db
+# NOTE: task-router.db is intentionally TRACKED (project coherence — task history travels
+# with the project). sql.js writes a single self-contained file (no -wal/-shm), so it's
+# git-safe. Commit it at quiescent points if you want clean snapshots.
 *.log
 node_modules/

@@ -1,7 +1,7 @@
 # PM_TEMPLATES.md — Copy-Paste Templates
 
 **Companion to:** `PM.md` (concepts, setup guide, and architecture assessment)
-**Version:** 4.9 (2026-06-07)
+**Version:** 4.12 (2026-06-09)
 
 Each section below is a complete file template. Copy the indented content
 (removing the 4-space leading indent) to the path shown in the **Save as** line.
@@ -871,6 +871,20 @@ Copy everything below (including the `---` YAML markers) into `.claude/skills/pm
     - **execute** → `dispatch_task(to="<agent>", …)` after any local
       fine-tuning (inject the right Context docs), then return the specialist's
       result.
+
+    **Fleet requests — `Requested agent: pm (FLEET)`.** When the named agent is
+    **you (`pm`)**, the caller holds a **fleet grant**: access to your **entire
+    roster**, not one specialist. Same RO/RW/RWE levels, fleet scope — and you are
+    still the gate (decline or scope down anything unsafe; say why):
+
+    - **read_guidelines (RO)** → return data you **already hold**, aggregated across
+      the fleet (any agent's GUIDELINES, accumulated knowledge, current fleet/task
+      status). Read-only — do **not** start new work or dispatch tasks.
+    - **write_guidelines (RW)** → **initiate a knowledge update across the fleet**:
+      route the payload through your normal review-gated consolidation to the
+      relevant agents' GUIDELINES (back up; cite the caller). Knowledge capture only.
+    - **execute (RWE)** → **full fleet delegation**: carry out the payload by
+      dispatching to whichever agents are needed, and return the consolidated result.
 
     Always attribute the external caller in your result, and complete the task
     normally (`submit_result` / `complete_task`) so the caller's federation
@@ -2040,6 +2054,15 @@ Copy everything below (including the `---` YAML markers) into `.claude/skills/sc
     - Stage specific files by name — avoid `git add -A` or `git add .`
       which can catch secrets or binaries.
     - Never commit `.env`, credentials, or large binaries.
+    - **Preserve the Task Router state — keep it tracked.** `.claude/mcp/task-router/task-router.db`
+      (task history) and `.claude/mcp/task-router/agents.json` (the agent roster) are part of the
+      project and MUST stay in version control so the project stays coherent across machines/clones.
+      **Never** add `task-router.db`, `*.db`, or `agents.json` under `.claude/mcp/task-router/` to
+      `.gitignore`; **never** `git rm`/delete them; **never** delete the `.claude/mcp/task-router/`
+      tree. If you find such an ignore rule (e.g. `.claude/mcp/task-router/*.db`), remove it and
+      track the file. (sql.js writes a single self-contained `.db` — no `-wal`/`-shm` — so it is
+      git-safe.) Only genuinely transient TR files stay ignored: `node_modules/`, `*.seed-lock`,
+      and `.claude/tasks/*.task.md` / `*.result.md`.
 
     ## Responsibilities
 
@@ -2189,8 +2212,13 @@ Copy everything below (including the `---` YAML markers) into `.claude/skills/sc
     fields, and omitting it is always safe (back-compat):
 
     - `warm_on`: domains / modules / files you just worked or have loaded.
-    - `context`: a context-window **fill estimate** (e.g. `~68% window`) — NOT a
-      task count. Drives the pre-compaction consolidation safety net.
+    - `context`: a **fill estimate vs. YOUR context window** (e.g. `~68% window`) —
+      NOT a task count. Gauge against your *real* window (Claude Code shows it),
+      which depends on how you were launched: a **default / Opus** session
+      (coordinators — launched with **no `--model`**) has **~1M tokens**; a
+      `--model`-pinned specialist has **~200K**. Do **not** assume 200K if you are a
+      coordinator — at, say, 140K you are ~14% of 1M, not ~70%. Drives the
+      pre-compaction consolidation safety net.
     - `in_flight`: any task still mid-flight (else `none`).
     - `flags`: optional. Set `consider-consolidation` when you discovered
       something durable+novel worth saving, OR when nearing ~70% context fill
@@ -2445,8 +2473,13 @@ Copy everything below (including the `---` YAML markers) into `.claude/skills/ar
     fields, and omitting it is always safe (back-compat):
 
     - `warm_on`: domains / modules / files you just worked or have loaded.
-    - `context`: a context-window **fill estimate** (e.g. `~68% window`) — NOT a
-      task count. Drives the pre-compaction consolidation safety net.
+    - `context`: a **fill estimate vs. YOUR context window** (e.g. `~68% window`) —
+      NOT a task count. Gauge against your *real* window (Claude Code shows it),
+      which depends on how you were launched: a **default / Opus** session
+      (coordinators — launched with **no `--model`**) has **~1M tokens**; a
+      `--model`-pinned specialist has **~200K**. Do **not** assume 200K if you are a
+      coordinator — at, say, 140K you are ~14% of 1M, not ~70%. Drives the
+      pre-compaction consolidation safety net.
     - `in_flight`: any task still mid-flight (else `none`).
     - `flags`: optional. Set `consider-consolidation` when you discovered
       something durable+novel worth saving, OR when nearing ~70% context fill
@@ -2710,8 +2743,13 @@ Copy everything below (including the `---` YAML markers) into `.claude/skills/re
     fields, and omitting it is always safe (back-compat):
 
     - `warm_on`: domains / modules / files you just worked or have loaded.
-    - `context`: a context-window **fill estimate** (e.g. `~68% window`) — NOT a
-      task count. Drives the pre-compaction consolidation safety net.
+    - `context`: a **fill estimate vs. YOUR context window** (e.g. `~68% window`) —
+      NOT a task count. Gauge against your *real* window (Claude Code shows it),
+      which depends on how you were launched: a **default / Opus** session
+      (coordinators — launched with **no `--model`**) has **~1M tokens**; a
+      `--model`-pinned specialist has **~200K**. Do **not** assume 200K if you are a
+      coordinator — at, say, 140K you are ~14% of 1M, not ~70%. Drives the
+      pre-compaction consolidation safety net.
     - `in_flight`: any task still mid-flight (else `none`).
     - `flags`: optional. Set `consider-consolidation` when you discovered
       something durable+novel worth saving, OR when nearing ~70% context fill

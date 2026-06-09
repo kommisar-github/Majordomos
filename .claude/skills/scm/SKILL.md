@@ -37,6 +37,15 @@ index. Always read first. Then apply the tiered load rule below:
 - Stage specific files by name — avoid `git add -A` or `git add .`
   which can catch secrets or binaries.
 - Never commit `.env`, credentials, or large binaries.
+- **Preserve the Task Router state — keep it tracked.** `.claude/mcp/task-router/task-router.db`
+  (task history) and `.claude/mcp/task-router/agents.json` (the agent roster) are part of the
+  project and MUST stay in version control so the project stays coherent across machines/clones.
+  **Never** add `task-router.db`, `*.db`, or `agents.json` under `.claude/mcp/task-router/` to
+  `.gitignore`; **never** `git rm`/delete them; **never** delete the `.claude/mcp/task-router/`
+  tree. If you find such an ignore rule (e.g. `.claude/mcp/task-router/*.db`), remove it and
+  track the file. (sql.js writes a single self-contained `.db` — no `-wal`/`-shm` — so it is
+  git-safe.) Only genuinely transient TR files stay ignored: `node_modules/`, `*.seed-lock`,
+  and `.claude/tasks/*.task.md` / `*.result.md`.
 
 ## Responsibilities
 
@@ -186,8 +195,13 @@ working state. It is a routing hint for PM, not a report — keep it to a few
 fields, and omitting it is always safe (back-compat):
 
 - `warm_on`: domains / modules / files you just worked or have loaded.
-- `context`: a context-window **fill estimate** (e.g. `~68% window`) — NOT a
-  task count. Drives the pre-compaction consolidation safety net.
+- `context`: a **fill estimate vs. YOUR context window** (e.g. `~68% window`) —
+  NOT a task count. Gauge against your *real* window (Claude Code shows it),
+  which depends on how you were launched: a **default / Opus** session
+  (coordinators — launched with **no `--model`**) has **~1M tokens**; a
+  `--model`-pinned specialist has **~200K**. Do **not** assume 200K if you are a
+  coordinator — at, say, 140K you are ~14% of 1M, not ~70%. Drives the
+  pre-compaction consolidation safety net.
 - `in_flight`: any task still mid-flight (else `none`).
 - `flags`: optional. Set `consider-consolidation` when you discovered
   something durable+novel worth saving, OR when nearing ~70% context fill

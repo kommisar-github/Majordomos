@@ -176,8 +176,13 @@ working state. It is a routing hint for PM, not a report — keep it to a few
 fields, and omitting it is always safe (back-compat):
 
 - `warm_on`: domains / modules / files you just worked or have loaded.
-- `context`: a context-window **fill estimate** (e.g. `~68% window`) — NOT a
-  task count. Drives the pre-compaction consolidation safety net.
+- `context`: a **fill estimate vs. YOUR context window** (e.g. `~68% window`) —
+  NOT a task count. Gauge against your *real* window (Claude Code shows it),
+  which depends on how you were launched: a **default / Opus** session
+  (coordinators — launched with **no `--model`**) has **~1M tokens**; a
+  `--model`-pinned specialist has **~200K**. Do **not** assume 200K if you are a
+  coordinator — at, say, 140K you are ~14% of 1M, not ~70%. Drives the
+  pre-compaction consolidation safety net.
 - `in_flight`: any task still mid-flight (else `none`).
 - `flags`: optional. Set `consider-consolidation` when you discovered
   something durable+novel worth saving, OR when nearing ~70% context fill
