@@ -1,5 +1,5 @@
 # majordomos — Next Steps
-**Last Updated:** 2026-06-07
+**Last Updated:** 2026-06-09
 
 ## Abstract
 
@@ -17,10 +17,12 @@
 ---
 
 ## Immediate
-- [ ] Run `/pm` and describe the project in 2-3 sentences
-- [ ] PM proposes domain-specific agents — approve the ones you want
-- [ ] Customize `doc/design/DOC_OWNERSHIP_MATRIX.md` for your project structure (see PM.md § Document Ownership Matrix)
-- [ ] Plan Phase 1 with `/arch`
+
+### Q-HA-WHITELIST — close-out (gate shipped: commits 9568384 + a22a420)
+- [ ] **Operator:** finalize the Critical-entity `entity_id`s (breakers, PV/charger contactor, water valve, door lockdown/evacuation, main-entrance-lock relay, `visonic_p1_*`, intercom door relay — hunt siblings) → write to `fleet/ha_whitelist.json`. Seed list: `doc/design/ha_whitelist_gate.md §3.3`.
+- [ ] **Operator:** run `doc/runbooks/ha_v1_exposure.md` — un-expose Tier B/C on the HA MCP Server (zero-code) to **close the live safety gap** (destructive HA domains currently reachable with no gate).
+- [ ] **Deferred implementation review** (`/review`, after relaunch — terminal was `needs-restart`): end-to-end audit of `mcp-task-router-app/src/ha-bridge.js` + `serverHost.js` (incl. `/app`'s separate `127.0.0.1:3101` executor server vs route-on-existing) **and the PM §H1 correlation path** (reply-parsing, N2 channel-bind, N3 server-time TTL, N4 delete-before-execute, N6 startup sweep) — that policy path is **not** covered by the 36+9 unit tests and is owed an audit before production trust.
 
 ## Backlog
-(PM will populate this as work is identified)
+- [ ] **Q-HA-WHITELIST v3** — quiet-hours rules (vacuum/media after-hours), confirm-fatigue tuning, an audit log of every confirm decision, per-entity graduation of selected Tier-C items to Tier B by explicit operator opt-in (`doc/design/ha_whitelist_gate.md §8 v3`).
+- [ ] **Provision the always-on path** — run `host/provision.sh --inject-secrets` to populate the launchd plists (`com.majordomus.taskrouter.plist`, `com.majordomus.telegram.plist`) from `.env`, then `launchctl bootstrap`. (Templates + flow built; see `doc/design/host_ops.md`.)
