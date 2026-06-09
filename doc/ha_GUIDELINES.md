@@ -48,6 +48,57 @@ consistency via `/pm audit`.
   `doc/design/ha_integration.md § Safety boundary`) — reference those docs;
   do not duplicate the lists here (update them when the tiers change).
 
+- **ha-bridge.js executor — entry-point contract (`/app` wires this, loopback-only).**
+  `loadWhitelist()` once at server startup; then:
+
+  | Export | Signature | Returns |
+  |---|---|---|
+  | `loadWhitelist(filePath?)` | validates + caches whitelist | whitelist object |
+  | `classify(domain, service, entity)` | resolver (see precedence below) | `'A'` \| `'B'` \| `'C'` |
+  | `classifyCustomTool(name)` | classifies non-domain HA custom tools | `'A'` \| `'B'` \| `'C'` |
+  | `mintConfirmId()` | UUIDv4 — 122-bit CSPRNG (N1: unguessable confirm secret) | UUID string |
+  | `executeApprovedAction({domain, service, entity, data?})` | loopback executor — hard-refuses C/Critical/unknown before any HTTP; trusts PM invocation for Tier-B approval bit (N5/G3) | `{ tier, status, data }` |
+
+  `/app` mounts `executeApprovedAction` as a loopback-only POST route. **PM's runtime call contract:**
+
+  ```
+  POST http://127.0.0.1:3101/api/ha/execute
+  Body: { domain, service, entity, data? }
+
+  200  { ok: true,  tier, status, data }   — action executed
+  403  { ok: false, error }                — [HARD-REFUSE]: Tier-C / Critical / unknown
+  502  { ok: false, error }                — HA transport error (network / 4xx from HA)
+  ```
+
+  Attach-don't-restart pattern applies (no 409); port overridable via `HA_EXEC_PORT` (default 3101).
+
+- **Resolver precedence — `classify(domain, service, entity) → tier`.** Most-specific wins:
+  1. **Critical-entity list** — hard Tier-C floor (M7: per-entity allow cannot lift a Critical entity; only `promote_critical: true` raises it to Tier B, never A; git-reviewed only, never runtime-settable).
+  2. **Per-entity override** (non-Critical entities only).
+  3. **Domain+service override** (e.g. `cover.stop_cover → A` — abort is always safe).
+  4. **Domain default** (`fleet/ha_whitelist.json` `domain_defaults` map).
+  5. **Fail-closed → Tier C.** Unknown domain/entity/anything unclassified ⇒ deny.
+
+- **`fleet/ha_whitelist.json` schema conventions.** Top-level keys (current v1 schema):
+
+  | Key | Purpose |
+  |---|---|
+  | `version: 1` | **Required** — loader throws `Unsupported whitelist version` without it. Bump to gate breaking schema changes. |
+  | `glob_support: true` | Enables trailing-`*` prefix entity matching. When `false`, the loader **MUST reject** any `*`-containing entry — a non-glob loader silently matches nothing, silently de-classifying Critical entities (M5 hard requirement). |
+  | `ttl.inbound_seconds: 120` | Confirm TTL for HA-originated (inbound) Tier-B requests. |
+  | `ttl.outbound_seconds: 300` | Confirm TTL for PM-initiated outbound Tier-B actions (operator may be away). |
+  | `critical_entities` | Hard Tier-C floor. Each entry `{ entity_id, operator_finalize: true, promote_critical?: true }`; `promote_critical` only promotes to Tier B, git-reviewed only. |
+  | `domain_defaults` | Primary tier map by HA domain (`light→A`, `cover→B`, `lock→C`, …). Fallback after Critical + per-entity checks. |
+  | `domain_service_overrides` | Per-`(domain, service)` tier exceptions (e.g. `cover.stop_cover → A`). Beats `domain_defaults`. |
+  | `custom_tools` | Tier map for custom HA MCP tools with no HA domain (e.g. `set_shutters_to_min_light → B`). |
+  | `per_entity_overrides` | Allow/deny overrides for specific non-Critical entities (e.g. `script.goodnight → A`). Cannot lift a Critical entity (M7). |
+
+- **Custom HA MCP tools bypass the domain classifier — hunt them explicitly.**
+  Tools like `set_shutters_to_min_light` are custom HA integrations, not standard `Hass*`
+  intents; they are not reachable via `domain_defaults`. Classify with `classifyCustomTool(name)`.
+  In v1 exposure pruning, **list them explicitly in the runbook** — a "remove all destructive
+  `Hass*` tools" sweep silently leaves custom tools live (W3, design §3.2).
+
 ## Decisions
 
 - **2026-06-09 — Q-HA-TRANSPORT: RESOLVED → official HA MCP Server (SSE).**
@@ -68,7 +119,12 @@ consistency via `/pm audit`.
   READ-only via REST `GET /api/states`. Critical-entity list is a hard Tier-C
   floor in git-reviewed `fleet/ha_whitelist.json` (operator finalises exact
   entity_ids). Rollout: v1 zero-code exposure-pruning
-  (`doc/runbooks/ha_v1_exposure.md`); v2 build executor + PM correlation.
+  (`doc/runbooks/ha_v1_exposure.md`); **v2 gate core BUILT (2026-06-09):**
+  `fleet/ha_whitelist.json` (tier map + Critical list + TTL defaults),
+  `mcp-task-router-app/src/ha-bridge.js` (resolver + loopback executor +
+  confirm_id mint), 36 tests passing. Entry-point contract + schema conventions:
+  see § Conventions. PM confirm-correlation (save_memory, reply-parsing, TTL,
+  N2 channel-bind, delete-before-execute) remains **PM policy — not /ha code**.
   Accepted defaults: vacuum=B, media=confirm-after-hours, lock/alarm stay C,
   `set_shutters_to_min_light`=B, TTL 120/300.
 
