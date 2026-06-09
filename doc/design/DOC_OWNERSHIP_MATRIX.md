@@ -54,6 +54,8 @@
 | `ha_GUIDELINES.md` | reference | `/ha` | `/pm` | Durable per-agent guidelines for `/ha`. |
 | `app_GUIDELINES.md` | reference | `/app` | `/pm` | Durable per-agent guidelines for `/app`. |
 | `ops_GUIDELINES.md` | reference | `/ops` | `/pm` | Durable per-agent guidelines for `/ops`. |
+| `runbooks/ha_v1_exposure.md` | reference | `/ops` | `/ha`, `/pm` | Operator runbook: prune Tier B/C entities from HA MCP Server exposure (v1 zero-code safety gate). |
+| `design/host_ops.md` | reference | `/ops` | `/pm` | macOS always-on host runbook: provisioning, headless claude auth, launchd, env wiring for HA/telegram secrets. |
 
 ---
 

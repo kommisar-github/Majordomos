@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  com.majordomus.telegram — Majordomus Telegram bridge (always-on LaunchAgent)
+
+  The bridge polls the Task Router for [HA CONFIRM] / [PM] tasks and forwards
+  them to the operator's Telegram account; replies are posted back as task results.
+
+  TEMPLATE — secrets are NEVER committed here.
+  Run  bash host/provision.sh --inject-secrets  to patch this file in-place
+  with values from .claude/mcp/telegram-bridge/.env before loading it.
+
+  Load:
+    launchctl bootstrap gui/$(id -u) \
+      ~/GitHub/Majordomos/host/launchd/com.majordomus.telegram.plist
+
+  Unload:
+    launchctl bootout gui/$(id -u)/com.majordomus.telegram
+
+  Logs:  ~/Library/Logs/majordomus/telegram.log / telegram.err
+-->
+<plist version="1.0">
+<dict>
+
+  <key>Label</key>
+  <string>com.majordomus.telegram</string>
+
+  <!-- Run the bot through a bash login shell (picks up Homebrew / nvm PATH).
+       bot.js reads its own env vars from EnvironmentVariables below. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-l</string>
+    <string>-c</string>
+    <!-- patched by provision.sh --inject-secrets -->
+    <string>exec node __INJECT_AT_PROVISION__/.claude/mcp/telegram-bridge/bot.js</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <!-- patched by provision.sh --inject-secrets -->
+  <string>__INJECT_AT_PROVISION__/.claude/mcp/telegram-bridge</string>
+
+  <!-- Secrets injected at provision time from
+       .claude/mcp/telegram-bridge/.env — never committed with real values. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>TELEGRAM_BOT_TOKEN</key>
+    <string>__INJECT_AT_PROVISION__</string>
+
+    <key>TELEGRAM_ALLOWED_USER</key>
+    <string>__INJECT_AT_PROVISION__</string>
+
+    <!-- Task Router server — loopback only (G3); never exposed externally -->
+    <key>TASK_ROUTER_URL</key>
+    <string>http://127.0.0.1:3100</string>
+
+    <key>TASK_ROUTER_PROJECT</key>
+    <string>majordomos</string>
+
+    <key>TASK_ROUTER_API_KEY</key>
+    <string>__INJECT_AT_PROVISION__</string>
+
+    <key>HOME</key>
+    <string>__INJECT_AT_PROVISION__</string>
+  </dict>
+
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>__INJECT_AT_PROVISION__/Library/Logs/majordomus/telegram.log</string>
+  <key>StandardErrorPath</key>
+  <string>__INJECT_AT_PROVISION__/Library/Logs/majordomus/telegram.err</string>
+
+</dict>
+</plist>

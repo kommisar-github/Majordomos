@@ -42,10 +42,11 @@ consistency via `/pm audit`.
   is no Majordomus-side whitelist for MCP-path outbound calls — the operator
   controls which entities the HA MCP Server integration exposes. The
   confirmation gate applies to inbound (HA→Majordomus) requests and to outbound
-  calls against withheld domains once the Majordomus-side gate is built. The
-  canonical first-expose / withhold entity tiers live in
-  `doc/design/ha_integration.md § Outbound safety boundary` — reference that
-  doc; do not duplicate the lists here (update it when the tiers change).
+  calls against withheld domains via the gated loopback executor. The
+  canonical tier tables + gate design live in
+  `doc/design/ha_whitelist_gate.md` (summarised in
+  `doc/design/ha_integration.md § Safety boundary`) — reference those docs;
+  do not duplicate the lists here (update them when the tiers change).
 
 ## Decisions
 
@@ -56,17 +57,33 @@ consistency via `/pm audit`.
   for the **outbound** path — superseded (ha-bridge.js is still in scope for the
   inbound gate). Full rationale in `doc/design/ha_integration.md § Transport`.
 
+- **2026-06-09 — Q-HA-WHITELIST: RESOLVED → three-tier default-deny gate.**
+  Operator-approved + twice `/review`-audited. Authoritative design + tier
+  tables: `doc/design/ha_whitelist_gate.md`. Model: **tier == reachability
+  path** — Tier A exposed on the MCP Server (auto); Tier B NOT exposed,
+  reached only via the gated loopback ha-bridge executor with a PM-correlated
+  Telegram confirm (unguessable `confirm_id` + `from_agent=="telegram"`,
+  delete-before-execute, server-time TTL 120 s/300 s, no-reply ⇒ never runs);
+  Tier C neither exposed nor bridged (alarm/lock/Critical `switch.*`/unknown),
+  READ-only via REST `GET /api/states`. Critical-entity list is a hard Tier-C
+  floor in git-reviewed `fleet/ha_whitelist.json` (operator finalises exact
+  entity_ids). Rollout: v1 zero-code exposure-pruning
+  (`doc/runbooks/ha_v1_exposure.md`); v2 build executor + PM correlation.
+  Accepted defaults: vacuum=B, media=confirm-after-hours, lock/alarm stay C,
+  `set_shutters_to_min_light`=B, TTL 120/300.
+
 ## Open Questions
 
-- **Q-HA-WHITELIST (Majordomus-side gate) — OPEN.** The v1 safety boundary is
-  HA-side entity exposure only. The Majordomus-side confirmation gate (for
-  inbound `[HA REQUEST]` and outbound calls against destructive domains) is not
-  yet designed. Proposed default when designed: reads + `light`/`scene`/`notify`
-  immediate; `lock`/`alarm_control_panel`/`cover`/`climate` setpoints require
-  Telegram confirmation via PM.
+- **Critical-entity list finalisation — OPEN (operator).** Exact `entity_id`s
+  for the Tier-C Critical list (breakers, PV/charger contactor, water valve,
+  door lockdown/evacuation, main-entrance-lock relay, `visonic_p1_*`, intercom
+  door relay) must be confirmed by the operator + siblings hunted, then written
+  to `fleet/ha_whitelist.json`. Seed list in `doc/design/ha_whitelist_gate.md §3.3`.
 
-- **Env-loading gap for always-on path — OPEN (`/ops`).** The launchd plist
-  (`host/launchd/com.majordomus.taskrouter.plist`, not yet created) needs
-  `EnvironmentVariables` for `HA_BASE_URL`/`HA_TOKEN`. `/ops` must add a
-  `host/provision.sh` step that reads `.env` and patches the plist. Until done,
-  the always-on bundled app cannot connect to HA.
+- **Env-loading gap for always-on path — RESOLVED (`/ops`, 2026-06-09).**
+  `host/launchd/com.majordomus.taskrouter.plist` (Task Router app) and
+  `host/launchd/com.majordomus.telegram.plist` (Telegram bridge) created as
+  templates with `__INJECT_AT_PROVISION__` sentinels. `host/provision.sh
+  --inject-secrets` reads root `.env` + `.claude/mcp/telegram-bridge/.env`
+  and patches both plists via PlistBuddy at provision time (secrets never
+  committed). Full wiring doc: `doc/design/host_ops.md`.

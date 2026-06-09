@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
-# Majordomus host preflight (Phase 0 / gap G1). Run on the macOS host BEFORE
-# enabling always-on. Read-only: it asserts prerequisites, changes nothing.
+# Majordomus host preflight + secrets injection (macOS).
+#
+# Usage:
+#   bash host/provision.sh                  # Phase 0: assert prerequisites (read-only)
+#   bash host/provision.sh --inject-secrets # Phase 0 + Phase 2: also patch launchd plists
+#
+# Run Phase 0 alone first; resolve every FAIL before running --inject-secrets.
 set -u
 fail=0
 ok()  { printf '  OK   %s\n' "$*"; }
@@ -35,4 +40,79 @@ warn "node-pty native build needs Xcode Command Line Tools: xcode-select --insta
 
 echo ""
 if [ "$fail" = 0 ]; then echo "Preflight PASS — host ready to run the Majordomus app."; else echo "Preflight FAIL — resolve the FAIL items before enabling always-on."; fi
+
+# ─── Phase 2 — inject secrets into launchd plists (opt-in) ───────────────────
+if [ "${1:-}" = "--inject-secrets" ]; then
+  echo ""
+  echo "=== Phase 2: inject secrets into launchd plists ==="
+
+  REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  ROOT_ENV="$REPO_ROOT/.env"
+  TG_ENV="$REPO_ROOT/.claude/mcp/telegram-bridge/.env"
+  PLIST_DIR="$REPO_ROOT/host/launchd"
+  TR_PLIST="$PLIST_DIR/com.majordomus.taskrouter.plist"
+  TG_PLIST="$PLIST_DIR/com.majordomus.telegram.plist"
+  PB="/usr/libexec/PlistBuddy"
+
+  if [ ! -f "$ROOT_ENV" ]; then bad ".env not found at $REPO_ROOT/.env — create it first (see doc/design/host_ops.md)"; exit 1; fi
+  # Load root .env
+  set -a; . "$ROOT_ENV"; set +a
+
+  # Load telegram .env if present
+  if [ -f "$TG_ENV" ]; then set -a; . "$TG_ENV"; set +a
+  else warn "telegram .env not found at $TG_ENV — telegram plist will have placeholder values"; fi
+
+  pb_set() {
+    # Usage: pb_set <plist> <key-path> <value>
+    "$PB" -c "Set $2 $3" "$1" 2>/dev/null || "$PB" -c "Add $2 string $3" "$1"
+  }
+
+  HOME_DIR="$HOME"
+
+  # ── Task Router plist ────────────────────────────────────────────────────────
+  if [ ! -f "$TR_PLIST" ]; then bad "Task Router plist not found: $TR_PLIST"; else
+    echo "  Patching $TR_PLIST ..."
+    # ProgramArguments[2] = script path
+    "$PB" -c "Set :ProgramArguments:2 ${REPO_ROOT}/start-majordomos.sh" "$TR_PLIST"
+    pb_set "$TR_PLIST" ":WorkingDirectory" "$REPO_ROOT"
+    pb_set "$TR_PLIST" ":EnvironmentVariables:ANTHROPIC_API_KEY" "${ANTHROPIC_API_KEY:-}"
+    pb_set "$TR_PLIST" ":EnvironmentVariables:TASK_ROUTER_API_KEY" "${TASK_ROUTER_API_KEY:-}"
+    pb_set "$TR_PLIST" ":EnvironmentVariables:HA_BASE_URL" "${HA_BASE_URL:-}"
+    pb_set "$TR_PLIST" ":EnvironmentVariables:HA_TOKEN" "${HA_TOKEN:-}"
+    pb_set "$TR_PLIST" ":EnvironmentVariables:HOME" "$HOME_DIR"
+    pb_set "$TR_PLIST" ":StandardOutPath" "${HOME_DIR}/Library/Logs/majordomus/taskrouter.log"
+    pb_set "$TR_PLIST" ":StandardErrorPath" "${HOME_DIR}/Library/Logs/majordomus/taskrouter.err"
+    ok "Task Router plist patched"
+  fi
+
+  # ── Telegram bridge plist ────────────────────────────────────────────────────
+  if [ ! -f "$TG_PLIST" ]; then bad "Telegram plist not found: $TG_PLIST"; else
+    echo "  Patching $TG_PLIST ..."
+    BOT_JS="${REPO_ROOT}/.claude/mcp/telegram-bridge/bot.js"
+    "$PB" -c "Set :ProgramArguments:3 exec node ${BOT_JS}" "$TG_PLIST"
+    pb_set "$TG_PLIST" ":WorkingDirectory" "${REPO_ROOT}/.claude/mcp/telegram-bridge"
+    pb_set "$TG_PLIST" ":EnvironmentVariables:TELEGRAM_BOT_TOKEN" "${TELEGRAM_BOT_TOKEN:-}"
+    pb_set "$TG_PLIST" ":EnvironmentVariables:TELEGRAM_ALLOWED_USER" "${TELEGRAM_ALLOWED_USER:-}"
+    pb_set "$TG_PLIST" ":EnvironmentVariables:TASK_ROUTER_API_KEY" "${TASK_ROUTER_API_KEY:-}"
+    pb_set "$TG_PLIST" ":EnvironmentVariables:HOME" "$HOME_DIR"
+    pb_set "$TG_PLIST" ":StandardOutPath" "${HOME_DIR}/Library/Logs/majordomus/telegram.log"
+    pb_set "$TG_PLIST" ":StandardErrorPath" "${HOME_DIR}/Library/Logs/majordomus/telegram.err"
+    ok "Telegram bridge plist patched"
+  fi
+
+  # ── Create log directory ─────────────────────────────────────────────────────
+  mkdir -p "${HOME_DIR}/Library/Logs/majordomus"
+  ok "Log directory ready: ~/Library/Logs/majordomus/"
+
+  echo ""
+  echo "Phase 2 complete. Next steps:"
+  echo "  1. Verify: plutil -lint host/launchd/com.majordomus.taskrouter.plist"
+  echo "  2. Load:   launchctl bootstrap gui/\$(id -u) \\"
+  echo "               \"\$PWD/host/launchd/com.majordomus.taskrouter.plist\""
+  echo "  3. Load:   launchctl bootstrap gui/\$(id -u) \\"
+  echo "               \"\$PWD/host/launchd/com.majordomus.telegram.plist\""
+  echo "  4. Check:  launchctl list | grep majordomus"
+  echo "  NOTE: the patched plists contain secrets — do NOT commit them after patching."
+fi
+
 exit "$fail"

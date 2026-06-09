@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "glob_support": true,
+  "ttl": {
+    "inbound_seconds": 120,
+    "outbound_seconds": 300
+  },
+
+  "critical_entities": [
+    { "entity_id": "switch.main_breaker",                   "operator_finalize": true },
+    { "entity_id": "switch.pv_contactor",                   "operator_finalize": true },
+    { "entity_id": "switch.charger_breaker",                "operator_finalize": true },
+    { "entity_id": "switch.all_doors_lockdown",             "operator_finalize": true },
+    { "entity_id": "switch.evacuation",                     "operator_finalize": true },
+    { "entity_id": "switch.main_entrance_lock",             "operator_finalize": true },
+    { "entity_id": "switch.main_water_control_water_valve", "operator_finalize": true },
+    { "entity_id": "switch.visonic_p1_*",                   "operator_finalize": true },
+    { "entity_id": "switch.door_1_relay",                   "operator_finalize": true }
+  ],
+
+  "domain_defaults": {
+    "light":               "A",
+    "scene":               "A",
+    "input_boolean":       "A",
+    "fan":                 "A",
+    "media_player":        "A",
+    "switch":              "A",
+    "cover":               "B",
+    "climate":             "B",
+    "vacuum":              "B",
+    "script":              "B",
+    "automation":          "B",
+    "lock":                "C",
+    "alarm_control_panel": "C"
+  },
+
+  "domain_service_overrides": {
+    "cover": {
+      "stop_cover": "A"
+    }
+  },
+
+  "custom_tools": {
+    "set_shutters_to_min_light": "B"
+  },
+
+  "per_entity_overrides": []
+}

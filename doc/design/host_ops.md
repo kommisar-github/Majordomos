@@ -50,3 +50,106 @@ bash host/run-majordomus.sh           # npm-installs the app, starts server in-p
 Stop here for review before Phase 2 (Telegram) — per the plan's Phase-1 gate. The
 remaining `§12` answers (HA transport, fleet roster/grants, status-cost, whitelist,
 network) gate Phases 4–5, not this slice.
+
+## Env → process → launchd: secret wiring
+
+### Variables that must reach the process
+
+| Variable | Used by | Source |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | `claude` CLI (G1 headless auth) | root `.env` |
+| `TASK_ROUTER_API_KEY` | Task Router REST gate | root `.env` |
+| `HA_BASE_URL` | `.mcp.json` `${HA_BASE_URL}` expansion + v2 ha-bridge executor | root `.env` |
+| `HA_TOKEN` | `.mcp.json` `${HA_TOKEN}` expansion + v2 ha-bridge executor | root `.env` |
+| `TELEGRAM_BOT_TOKEN` | Telegram bridge process | `.claude/mcp/telegram-bridge/.env` |
+| `TELEGRAM_ALLOWED_USER` | Telegram bridge process | `.claude/mcp/telegram-bridge/.env` |
+
+`HA_BASE_URL` and `HA_TOKEN` expand `${VAR}` references in `.mcp.json` at connection
+time — Claude Code reads from the running process environment only; it is NOT a
+dotenv loader. If either var is absent, the `home-assistant` SSE MCP server will
+fail to authenticate (diagnose as connection-time auth failure, not a Claude Code
+error).
+
+The v2 ha-bridge loopback executor (`POST ${HA_BASE_URL}/api/services/…`) also reads
+both vars directly. The executor route is loopback-only (G3): owner endpoints and
+web UI stay bound to 127.0.0.1; the executor is the only external-API caller.
+
+### Interactive launcher path (all platforms)
+
+All three launchers source the root `.env` **before** invoking `node` / `claude`:
+
+| Launcher | Mechanism |
+|---|---|
+| `start-majordomos.ps1` (Windows) | `Get-Content .env \| ForEach-Object { SetEnvironmentVariable }` |
+| `start-majordomos.sh` (macOS/Linux terminal) | `set -a; . .env; set +a` |
+| `start-majordomos.command` (macOS Finder) | same as `.sh` |
+
+The Telegram bridge (`bot.js`) reads `.claude/mcp/telegram-bridge/.env` through its
+own Node.js dotenv load — interactive invocation of the bridge does not need a
+separate wrapper.
+
+**Gap closed:** all interactive paths already load the required vars. No change needed.
+
+### Always-on path: launchd plists
+
+launchd runs with a minimal environment — no shell profile, no `.env`. Two LaunchAgent
+plists under `host/launchd/` cover the always-on path:
+
+| Plist | Process | Vars it carries |
+|---|---|---|
+| `com.majordomus.taskrouter.plist` | Task Router app (`start-majordomos.sh`) | `ANTHROPIC_API_KEY`, `TASK_ROUTER_API_KEY`, `HA_BASE_URL`, `HA_TOKEN`, `HOME` |
+| `com.majordomus.telegram.plist` | Telegram bridge (`bot.js`) | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_USER`, `TASK_ROUTER_API_KEY`, `HOME` |
+
+Both plists are committed **as templates** — the `EnvironmentVariables` keys contain
+the sentinel `__INJECT_AT_PROVISION__` instead of real values. Secrets are **never
+committed** (`.env` and `*.env` are gitignored). Provision-time injection is the only
+write path.
+
+### Provision-time injection (`host/provision.sh --inject-secrets`)
+
+```bash
+bash host/provision.sh                   # Phase 0: assert prerequisites (read-only)
+bash host/provision.sh --inject-secrets  # Phase 0 + Phase 2: patch plists in-place
+```
+
+Phase 2 (`--inject-secrets`) reads from:
+- `$REPO_ROOT/.env` — all Task Router + HA vars
+- `$REPO_ROOT/.claude/mcp/telegram-bridge/.env` — telegram vars
+
+And uses `/usr/libexec/PlistBuddy` to patch the `EnvironmentVariables` dict,
+`ProgramArguments` paths, `WorkingDirectory`, and log paths in both plists.
+
+**After patching, the plists contain secrets — do NOT commit the patched files.**
+The `.gitignore` does not currently exclude the plist files; the operator must avoid
+staging them after injection. A pre-commit hook (optional) can enforce this.
+
+Load the patched plists:
+```bash
+launchctl bootstrap gui/$(id -u) "$(pwd)/host/launchd/com.majordomus.taskrouter.plist"
+launchctl bootstrap gui/$(id -u) "$(pwd)/host/launchd/com.majordomus.telegram.plist"
+```
+
+Verify both are registered:
+```bash
+launchctl list | grep majordomus
+```
+
+Unload (e.g. before re-patching):
+```bash
+launchctl bootout gui/$(id -u)/com.majordomus.taskrouter
+launchctl bootout gui/$(id -u)/com.majordomus.telegram
+```
+
+### `.env` format (root)
+
+The root `.env` (gitignored, operator-created) must contain at minimum:
+
+```bash
+ANTHROPIC_API_KEY=sk-ant-…
+TASK_ROUTER_API_KEY=<your-key>
+HA_BASE_URL=http://homeassistant.local:8123
+HA_TOKEN=<long-lived-ha-token>
+```
+
+Create the token in HA: **Settings → Profile → Long-Lived Access Tokens → Create**.
+`HA_BASE_URL` is the base URL of your HA instance (no trailing slash, no `/api` suffix).
