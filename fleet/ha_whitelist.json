@@ -7,15 +7,17 @@
   },
 
   "critical_entities": [
-    { "entity_id": "switch.main_breaker",                   "operator_finalize": true },
-    { "entity_id": "switch.pv_contactor",                   "operator_finalize": true },
-    { "entity_id": "switch.charger_breaker",                "operator_finalize": true },
-    { "entity_id": "switch.all_doors_lockdown",             "operator_finalize": true },
-    { "entity_id": "switch.evacuation",                     "operator_finalize": true },
-    { "entity_id": "switch.main_entrance_lock",             "operator_finalize": true },
-    { "entity_id": "switch.main_water_control_water_valve", "operator_finalize": true },
-    { "entity_id": "switch.visonic_p1_*",                   "operator_finalize": true },
-    { "entity_id": "switch.door_1_relay",                   "operator_finalize": true }
+    { "entity_id": "switch.main_power_breaker",                "operator_finalize": false },
+    { "entity_id": "switch.pv_contactor_switch_0",             "operator_finalize": false },
+    { "entity_id": "switch.charger_breaker_switch",            "operator_finalize": false },
+    { "entity_id": "switch.all_doors_lockdown",                "operator_finalize": true  },
+    { "entity_id": "switch.all_doors_evacuation",              "operator_finalize": false },
+    { "entity_id": "switch.evacuation",                        "operator_finalize": true  },
+    { "entity_id": "switch.main_entrance_lock",                "operator_finalize": true  },
+    { "entity_id": "switch.main_water_control_water_valve",    "operator_finalize": true  },
+    { "entity_id": "switch.visonic_p1_*",                      "operator_finalize": true  },
+    { "entity_id": "switch.front_door_intercom_door_relay_0",  "operator_finalize": false },
+    { "entity_id": "switch.street_intercom_door_relay_0",      "operator_finalize": false }
   ],
 
   "domain_defaults": {
