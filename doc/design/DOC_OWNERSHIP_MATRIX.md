@@ -57,6 +57,7 @@
 | `runbooks/ha_v1_exposure.md` | reference | `/ops` | `/ha`, `/pm` | Operator runbook: prune Tier B/C entities from HA MCP Server exposure (v1 zero-code safety gate). |
 | `design/host_ops.md` | reference | `/ops` | `/pm` | macOS always-on host runbook: provisioning, headless claude auth, launchd, env wiring for HA/telegram secrets. |
 | `reference/ha_entity_catalog.md` | reference | `/ha` | `/pm` | Full HA entity inventory (4,997 entities): by area, by function, safety-tier annotation, Critical-list finalization input, solar inverter battery finding, v1 pruning checklist. |
+| `reference/inverter_battery_health.md` | reference | `/ha` | `/pm` | Deye inverter battery health baseline (2026-06-09): health snapshot, SoH calculator diagnosis (3 missing helpers → silent no-op), operator fix steps, monitoring candidates. |
 
 ---
 
