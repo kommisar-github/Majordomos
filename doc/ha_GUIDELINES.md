@@ -1,5 +1,5 @@
 # /ha — Agent Guidelines
-**Last Updated:** 2026-06-09
+**Last Updated:** 2026-06-11
 
 ## Abstract
 
@@ -58,6 +58,10 @@ consistency via `/pm audit`.
   | `classifyCustomTool(name)` | classifies non-domain HA custom tools | `'A'` \| `'B'` \| `'C'` |
   | `mintConfirmId()` | UUIDv4 — 122-bit CSPRNG (N1: unguessable confirm secret) | UUID string |
   | `executeApprovedAction({domain, service, entity, data?})` | loopback executor — hard-refuses C/Critical/unknown before any HTTP; trusts PM invocation for Tier-B approval bit (N5/G3) | `{ tier, status, data }` |
+  | `classifyEntity(entity)` | **service-agnostic** body-entity classifier (Critical-floor → per-entity override → domain-default → fail-closed C). **Use this for bare entity_ids extracted from an automation/script body; do NOT use `classify`** (it needs a `service` arg and mis-handles a bare entity_id). | `'A'` \| `'B'` \| `'C'` |
+  | `executeConfigWrite({op, payload, confirm_id}, capToken)` | gated config-write verb — **cap-token validation is STEP 1, before any HA I/O**. Supported `op` set (`CONFIG_WRITE_OPS`): `helper_create\|update\|delete`, `template_sensor_create\|delete`, `automation_upsert\|delete`, `script_upsert\|delete`, `undo_config_write`; anything else ⇒ `[UNSUPPORTED-OP]`. | see config-write contract below |
+
+  *(`classify`/`classifyEntity` take the loaded whitelist as an implicit module-cached final arg; the signatures above omit it.)*
 
   `/app` mounts `executeApprovedAction` as a loopback-only POST route. **PM's runtime call contract:**
 
@@ -70,6 +74,23 @@ consistency via `/pm audit`.
   502  { ok: false, error }                — HA transport error (network / 4xx from HA)
   ```
 
+  **Config-write contract** (`ha_devops` is the only caller; cap-token required — distinct path from `/execute`):
+
+  ```
+  POST http://127.0.0.1:3101/api/ha/config-write
+  Authorization: Bearer <ha_devops cap-token>
+  Body: { op, payload, confirm_id }
+
+  200  { ok: true,  op, applied, audit_id, created_disabled, overwrote }
+  400  { ok: false, error }   — [UNSUPPORTED-OP]
+  401  { ok: false, error }   — [CAP-TOKEN]: absent / invalid / stale token
+  403  { ok: false, error }   — [BODY-SCAN-DENY]: body-scan hard-deny — DISTINCT from [HARD-DENY]
+  403  { ok: false, error }   — [FLEET_ENABLE_DENY]: cause-to-fire (any of the 7 forms)
+  403  { ok: false, error }   — [HARD-DENY]: disable-scope / NEW-1 overwrite protection
+  502  { ok: false, error }   — HA transport error
+  ```
+
+  `[BODY-SCAN-DENY]` and `[HARD-DENY]` are **distinct** 403 sentinels — do not conflate when reporting.
   Attach-don't-restart pattern applies (no 409); port overridable via `HA_EXEC_PORT` (default 3101).
 
 - **Resolver precedence — `classify(domain, service, entity) → tier`.** Most-specific wins:
@@ -99,6 +120,38 @@ consistency via `/pm audit`.
   In v1 exposure pruning, **list them explicitly in the runbook** — a "remove all destructive
   `Hass*` tools" sweep silently leaves custom tools live (W3, design §3.2).
 
+- **`fleet_enable_deny` — 7 cause-to-fire forms (not "enable-only").** Hard-denied at both the
+  requested-service check AND the in-body recursive body-scan (§4(i) — an upserted body that itself
+  calls a deny-listed service is refused). "Enable-only" is bypassable (`automation.trigger` fires a
+  *disabled* automation; `script.toggle` starts a stopped script). Full list + rationale:
+  `doc/design/ha_config_write.md` §3.3 — hold the **7-form** footprint, do not re-narrate it here.
+
+- **Automation upsert force-disable.** `automation_upsert` force-injects `initial_state:false` on the
+  resolved body (create AND update) + verify→`automation.turn_off` backstop + `state_anomaly` audit;
+  `script_upsert` skips it (the run-deny is the whole control for scripts). Spec: `ha_config_write.md` §3.1.
+
+- **NEW-1 overwrite-protection — GET-first prior-body classify.** `automation_upsert`/`script_upsert`
+  onto a pre-existing object whose *prior* body references a Critical entity ⇒ `[HARD-DENY]`, even with a
+  benign new body (`scanBody(prior)` runs first; blocks "launder a neuter" of a safety interlock). A genuine
+  create (`prior === null`) is unaffected. Spec: `ha_config_write.md` §3.4 / §5.2-4.
+
+- **WS client is command-type scoped — never `call_service`.** The one-shot WS client (`_scopedWsSend`)
+  rejects any `type` outside the enumerated config-command set **at the client boundary, before any network
+  I/O** (`[WS-SCOPE-VIOLATION]`). A `{type:"call_service"}` payload over WS would reach HA and bypass the
+  REST `classify()` + `fleet_enable_deny` gate. The guard must run first in every send path — **including
+  when `opts.wsCmd` is injected in tests** (structural, not test-bypassable).
+
+- **Execute-time prior capture for drift-safe undo.** Capture `prior` + `prior_hash` **immediately before
+  the write**, not at PM's confirm-time (a confirm-time snapshot is stale if a concurrent change lands).
+  Undo drift check: GET current config, compare `sha256(current) === post_hash` (the recorded post-write
+  hash); mismatch ⇒ `[UNDO-DRIFT]` refuse and surface to PM.
+
+- **§5.5 standing constraint — no raw out-of-band trigger verb.** Never add a raw event-fire
+  (`POST /api/events/<type>`), MQTT-publish, or Supervisor verb: any of them can trip a *pre-existing,
+  enabled* automation (via `platform: event`/MQTT trigger) without calling an automation service at all,
+  bypassing `fleet_enable_deny` entirely. The WS `call_service` ban is the same family. **Any such addition
+  requires fresh `/review`.** Full text: `ha_config_write.md` §5.5.
+
 ## Decisions
 
 - **2026-06-09 — Q-HA-TRANSPORT: RESOLVED → official HA MCP Server (SSE).**
@@ -127,6 +180,16 @@ consistency via `/pm audit`.
   N2 channel-bind, delete-before-execute) remains **PM policy — not /ha code**.
   Accepted defaults: vacuum=B, media=confirm-after-hours, lock/alarm stay C,
   `set_shutters_to_min_light`=B, TTL 120/300.
+
+- **2026-06-10 — Q-HA-CONFIGWRITE: RESOLVED → gated config-write executor + `ha_devops` runtime layer.**
+  Operator-approved; `/review` 8.5/10 ("linchpin AIRTIGHT"). Authoritative design: `doc/design/ha_config_write.md`
+  (v4). Key outcomes: (1) `/ha` owns `executeConfigWrite` in `ha-bridge.js` — cap-token-gated verb to
+  create/update/delete helpers, template sensors, automations, scripts; (2) `ha_devops` is the runtime-only
+  deployer (Mode-4-only, `no_fork`, per-session cap-token in `fleet/ha_devops_session.json`); (3) agent-created
+  automations deploy **force-disabled** + verified; (4) the fleet is hard-denied from ever causing any
+  automation/script to fire (7 `fleet_enable_deny` forms); (5) NEW-1 overwrite-protection guards pre-existing
+  Critical interlocks; (6) drift-safe undo via append-only `fleet/ha_config_audit.jsonl`. **Scope = config-writes
+  only** — Tier-B service calls keep the existing PM Telegram path. Entry-point + sentinel contract: see § Conventions.
 
 ## Open Questions
 
