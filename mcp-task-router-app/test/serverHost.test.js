@@ -13,6 +13,7 @@ const {
   createHaExecutorServer,
   _configWriteStatus,
   _makeValidateCapToken,
+  _defaultIsAgentLive,
 } = require('../src/serverHost');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -464,6 +465,123 @@ describe('_makeValidateCapToken', () => {
     const { hash } = makeToken();
     writeSession({ cap_token_hash: hash, agent: 'ha_devops', registered_at: new Date().toISOString() });
     assert.equal(fs.statSync(sessionFile).mode & 0o777, 0o600);
+  });
+});
+
+// ── _defaultIsAgentLive — unit tests (WARNING-1 direct coverage) ─────────────
+
+describe('_defaultIsAgentLive', () => {
+  // Ports chosen to avoid collisions with the rest of the suite.
+  const BASE_PORT = 19200;
+
+  let savedEnv = {};
+
+  beforeEach(() => {
+    savedEnv = {
+      TR_PORT:   process.env.TASK_ROUTER_PORT,
+      PROJECT:   process.env.TASK_ROUTER_PROJECT,
+      TIMEOUT:   process.env.AGENT_LIVE_TIMEOUT_MS,
+    };
+    // Speed up the timeout-branch test to 100 ms (default is 2000 ms).
+    process.env.AGENT_LIVE_TIMEOUT_MS = '100';
+  });
+
+  afterEach(() => {
+    if (savedEnv.TR_PORT  === undefined) delete process.env.TASK_ROUTER_PORT;
+    else process.env.TASK_ROUTER_PORT = savedEnv.TR_PORT;
+    if (savedEnv.PROJECT  === undefined) delete process.env.TASK_ROUTER_PROJECT;
+    else process.env.TASK_ROUTER_PROJECT = savedEnv.PROJECT;
+    if (savedEnv.TIMEOUT  === undefined) delete process.env.AGENT_LIVE_TIMEOUT_MS;
+    else process.env.AGENT_LIVE_TIMEOUT_MS = savedEnv.TIMEOUT;
+  });
+
+  // Helper: start a stub /stats server that returns a fixed JSON payload.
+  function stubStatsServer(port, responseBody, opts = {}) {
+    const srv = http.createServer((req, res) => {
+      if (opts.hang) {
+        // Accept the connection but never respond — simulates a hanging server.
+        req.resume();
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(responseBody);
+    });
+    return new Promise(resolve => srv.listen(port, '127.0.0.1', () => resolve(srv)));
+  }
+
+  // 1. ha_devops present in TTL-filtered agents list → true
+  test('ha_devops in agents list → true', async () => {
+    const port = BASE_PORT;
+    const body = JSON.stringify({ agents: [
+      { name: 'pm',        status: 'idle' },
+      { name: 'ha_devops', status: 'idle' },
+    ]});
+    const srv = await stubStatsServer(port, body);
+    process.env.TASK_ROUTER_PORT = String(port);
+    try {
+      assert.equal(await _defaultIsAgentLive('ha_devops'), true);
+    } finally {
+      await new Promise(r => srv.close(r));
+    }
+  });
+
+  // 2. ha_devops absent (aged out / never registered) → false
+  test('ha_devops absent from agents list → false', async () => {
+    const port = BASE_PORT + 1;
+    const body = JSON.stringify({ agents: [
+      { name: 'pm',   status: 'idle' },
+      { name: 'arch', status: 'idle' },
+    ]});
+    const srv = await stubStatsServer(port, body);
+    process.env.TASK_ROUTER_PORT = String(port);
+    try {
+      assert.equal(await _defaultIsAgentLive('ha_devops'), false);
+    } finally {
+      await new Promise(r => srv.close(r));
+    }
+  });
+
+  // 3. Empty agents list (all aged out) → false
+  test('empty agents list → false', async () => {
+    const port = BASE_PORT + 2;
+    const srv = await stubStatsServer(port, JSON.stringify({ agents: [] }));
+    process.env.TASK_ROUTER_PORT = String(port);
+    try {
+      assert.equal(await _defaultIsAgentLive('ha_devops'), false);
+    } finally {
+      await new Promise(r => srv.close(r));
+    }
+  });
+
+  // 4. Network error — connection refused (nothing listening) → false (fail-closed)
+  test('connection refused → false (fail-closed)', async () => {
+    process.env.TASK_ROUTER_PORT = '19299'; // nothing listening here
+    assert.equal(await _defaultIsAgentLive('ha_devops'), false);
+  });
+
+  // 5. Malformed / unparseable JSON response → false (fail-closed)
+  test('malformed JSON response → false (fail-closed)', async () => {
+    const port = BASE_PORT + 3;
+    const srv = await stubStatsServer(port, 'not-json{{{');
+    process.env.TASK_ROUTER_PORT = String(port);
+    try {
+      assert.equal(await _defaultIsAgentLive('ha_devops'), false);
+    } finally {
+      await new Promise(r => srv.close(r));
+    }
+  });
+
+  // 6. Request timeout — server accepts but never sends a response → false (fail-closed)
+  //    AGENT_LIVE_TIMEOUT_MS=100 (set in beforeEach) keeps this test fast.
+  test('hanging server (timeout) → false (fail-closed)', async () => {
+    const port = BASE_PORT + 4;
+    const srv = await stubStatsServer(port, '', { hang: true });
+    process.env.TASK_ROUTER_PORT = String(port);
+    try {
+      assert.equal(await _defaultIsAgentLive('ha_devops'), false);
+    } finally {
+      await new Promise(r => srv.close(r));
+    }
   });
 });
 

@@ -55,11 +55,15 @@ async function isTaskRouterUp() {
 /**
  * Default liveness checker: queries /stats on the in-process task-router and
  * returns true iff agentName appears in the agents list (within TTL).
- * Fail-closed: network error, parse error, or server down → false.
+ * Fail-closed: network error, parse error, timeout, or server down → false.
+ *
+ * Timeout: AGENT_LIVE_TIMEOUT_MS env var (default 2000 ms). Override in tests
+ * to avoid 2-second delays on the timeout branch.
  */
 async function _defaultIsAgentLive(agentName) {
   const port    = taskRouterPort();
   const project = process.env.TASK_ROUTER_PROJECT || 'Majordomos';
+  const timeout = parseInt(process.env.AGENT_LIVE_TIMEOUT_MS || '2000', 10);
   return new Promise(resolve => {
     const req = http.get(
       `http://127.0.0.1:${port}/stats?project=${encodeURIComponent(project)}`,
@@ -76,7 +80,7 @@ async function _defaultIsAgentLive(agentName) {
         });
       },
     );
-    req.setTimeout(2000, () => { req.destroy(); resolve(false); });
+    req.setTimeout(timeout, () => { req.destroy(); resolve(false); });
     req.on('error', () => resolve(false));
   });
 }
@@ -338,4 +342,5 @@ module.exports = {
   haDevopsSessionPath,
   _configWriteStatus,
   _makeValidateCapToken,
+  _defaultIsAgentLive,
 };
