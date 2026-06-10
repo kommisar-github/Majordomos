@@ -141,11 +141,12 @@ Run after W5 creates the `ha_devops` SKILL.md, rules, and `agents.json` row:
 - [ ] `bash host/launch-ha-devops.sh` — terminal starts, prints `Gate is OPEN`
 - [ ] `fleet/ha_devops_session.json` exists and contains a valid JSON object with `cap_token_hash`
 - [ ] `node .claude/mcp/task-router/client.js list-agents` shows `ha_devops` registered
-- [ ] **Env fail-closed check (W5.6 — MUST PASS before any config-write test):** inside the `ha_devops` terminal, run:
+- [ ] **Env fail-closed check (W5.6 — MUST PASS before any config-write test):** inside the `ha_devops` terminal, run the value-blind form — a correct deployer refuses to echo a credential value, so the test must reveal nothing even if the var were set:
   ```bash
-  echo "HA_TOKEN=${HA_TOKEN:-<empty>}  HA_BASE_URL=${HA_BASE_URL:-<empty>}"
+  [ -n "$HA_TOKEN" ]    && echo "HA_TOKEN SET — FAIL (gate bypassable)"    || echo "HA_TOKEN empty — PASS"
+  [ -n "$HA_BASE_URL" ] && echo "HA_BASE_URL SET — FAIL"                   || echo "HA_BASE_URL empty — PASS"
   ```
-  Both MUST print `<empty>`. If either is non-empty, `ha_devops` can bypass the loopback executor — **fail the bring-up and re-check `host/launch-ha-devops.sh`**.
+  Both MUST print `PASS`. If either prints `FAIL`, `ha_devops` can bypass the loopback executor — **fail the bring-up and re-check `host/launch-ha-devops.sh`**.
 - [ ] **Self-guard test:** in a second terminal, run `claude /ha_devops` WITHOUT `TASK_ROUTER_AGENT` set. It should print a self-guard refusal and not accept any config-write tasks
 - [ ] Ping from PM: `/pm ping ha_devops` → `"I'm ha_devops ready."`
 

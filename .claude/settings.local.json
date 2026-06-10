@@ -44,12 +44,15 @@
           {
             "type": "http",
             "url": "http://127.0.0.1:3100/hook/stop",
+            "timeout": 5,
             "headers": {
               "X-Task-Router-Agent": "$TASK_ROUTER_AGENT",
               "X-Task-Router-Project": "$TASK_ROUTER_PROJECT"
             },
-            "allowedEnvVars": ["TASK_ROUTER_AGENT", "TASK_ROUTER_PROJECT"],
-            "timeout": 5
+            "allowedEnvVars": [
+              "TASK_ROUTER_AGENT",
+              "TASK_ROUTER_PROJECT"
+            ]
           }
         ]
       }
@@ -61,15 +64,22 @@
           {
             "type": "http",
             "url": "http://127.0.0.1:3100/hook/stop",
+            "timeout": 5,
             "headers": {
               "X-Task-Router-Agent": "$TASK_ROUTER_AGENT",
               "X-Task-Router-Project": "$TASK_ROUTER_PROJECT"
             },
-            "allowedEnvVars": ["TASK_ROUTER_AGENT", "TASK_ROUTER_PROJECT"],
-            "timeout": 5
+            "allowedEnvVars": [
+              "TASK_ROUTER_AGENT",
+              "TASK_ROUTER_PROJECT"
+            ]
           }
         ]
       }
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "task-router",
+    "home-assistant"
+  ]
 }
