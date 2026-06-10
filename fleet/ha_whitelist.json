@@ -46,5 +46,41 @@
     "set_shutters_to_min_light": "B"
   },
 
-  "per_entity_overrides": []
+  "per_entity_overrides": [],
+
+  "fleet_enable_deny": {
+    "_comment": "Cause-to-fire deny set §3.3 (Q-HA-CONFIGWRITE). Hard-denied at both service-call and config-write executors. Returns FLEET_ENABLE_DENY sentinel — distinct from Tier C — for precise audit reason. Forms 1-6 by (domain,service); form 7 as homeassistant.turn_on|toggle + automation/script-target case.",
+    "domain_service": [
+      { "form": 1, "domain": "automation", "service": "turn_on",  "reason": "enables automation — can then fire" },
+      { "form": 2, "domain": "automation", "service": "toggle",   "reason": "enables a disabled automation" },
+      { "form": 3, "domain": "automation", "service": "trigger",  "reason": "fires disabled automation action sequence (skip_condition defaults true) — the v2-missed killer" },
+      { "form": 4, "domain": "script",     "service": "turn_on",  "reason": "runs the script" },
+      { "form": 5, "domain": "script",     "service": "toggle",   "reason": "toggling a stopped script starts (runs) it — the other v2-missed form" },
+      { "form": 6, "domain": "script",     "service": "*",        "reason": "named-script service form (script.<object_id>) runs the script; wildcard catches all remaining script.* services" }
+    ],
+    "homeassistant_wildcard": {
+      "form": 7,
+      "services": ["turn_on", "toggle"],
+      "deny_if_entity_domain_prefix": ["automation.", "script."],
+      "reason": "homeassistant.turn_on/toggle resolving to automation.*/script.* target (generic-domain enable caught by entity domain-prefix, not service domain)"
+    }
+  },
+
+  "disable_scope": {
+    "_comment": "Disable-scope rules §3.4 (Q-HA-CONFIGWRITE). W1 = rule data only; W2 wires executor enforcement logic. Governs fleet-initiated disable/delete/overwrite of pre-existing automations and scripts.",
+    "hard_deny_ops_if_prior_has_critical": {
+      "domains": ["automation", "script"],
+      "ops": ["turn_off", "delete", "upsert"],
+      "description": "HARD-DENIED: delete, disable (turn_off), or overwrite (upsert) of a pre-existing automation/script whose prior body references any Tier-C/Critical entity. Prevents laundering a safety-interlock neuter through a single benign confirm."
+    },
+    "permitted_own_deploy_backstop": {
+      "allowed_when": "prior_is_null_or_no_critical_prior_refs",
+      "description": "Executor may force-disable the object it is currently deploying (initial_state:false + turn_off backstop per §3.1). Allowed ONLY when prior==null (genuine create) or prior body references no Critical entity. Never against a pre-existing Critical interlock — that upsert is hard-denied at step 4 before any backstop runs."
+    },
+    "permitted_fleet_turn_off": {
+      "tier": "B",
+      "condition": "prior_body_has_no_critical_refs",
+      "description": "Fleet-initiated turn_off on an automation/script whose prior body (GET-first) references no Tier-C/Critical entity → Tier-B confirm required."
+    }
+  }
 }

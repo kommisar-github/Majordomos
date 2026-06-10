@@ -6,6 +6,8 @@
 fleet/*.secret.json
 # resolved-token half of fleet config (committed file carries only tokenRef)
 fleet/fleet.local.json
+# audit log — detective-only, holds confirm_ids; never commit
+fleet/ha_config_audit.jsonl
 # runtime
 # NOTE: task-router.db is intentionally TRACKED (project coherence — task history travels
 # with the project). sql.js writes a single self-contained file (no -wal/-shm), so it's
