@@ -73,6 +73,18 @@ if ! { { [ -n "$g_root" ] && node -e "require('$g_root/node-pty')" >/dev/null 2>
   fi
 fi
 
+# Ensure project-level deps are installed before starting (ha-bridge.js requires 'ws').
+# package-lock.json is committed → prefer npm ci; fall back if lock absent.
+PROJ_APP_DIR="$PROJECT_ROOT/mcp-task-router-app"
+if [ -d "$PROJ_APP_DIR" ] && [ ! -d "$PROJ_APP_DIR/node_modules" ]; then
+  echo "Installing mcp-task-router-app dependencies…"
+  if [ -f "$PROJ_APP_DIR/package-lock.json" ]; then
+    ( cd "$PROJ_APP_DIR" && npm ci --silent ) || { echo "npm ci failed in mcp-task-router-app — aborting." >&2; exit 1; }
+  else
+    ( cd "$PROJ_APP_DIR" && npm install --silent ) || { echo "npm install failed in mcp-task-router-app — aborting." >&2; exit 1; }
+  fi
+fi
+
 UI_URL_HOST="$UI_HOST"; [ "$UI_HOST" = "0.0.0.0" ] && UI_URL_HOST="<this-host-ip>"
 echo "Majordomos host -> http://$UI_URL_HOST:$UI_PORT  (app: $APP)"
 [ "$HOST" != "127.0.0.1" ] && echo "  remote federation enabled on $HOST:3100 — callers need a grant token (trtok_…); open the firewall port."

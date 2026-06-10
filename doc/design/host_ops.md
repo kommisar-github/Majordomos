@@ -24,9 +24,23 @@ module so it can live here without forking the shared app).
 
 ```bash
 bash host/provision.sh      # asserts node>=18, git, headless claude auth (G1), Tailscale (G3)
+                             # also auto-installs mcp-task-router-app deps (npm ci) if absent
 ```
 Resolve every `FAIL` before continuing. The critical one is **headless `claude` auth** —
 set `ANTHROPIC_API_KEY` (or a stored credential); the always-on PM has no human to log in.
+
+**Dependency install:** `provision.sh` auto-runs `npm ci` in `mcp-task-router-app/` if
+`node_modules/` is absent. `start-majordomos.sh` (the launchd entry-point) repeats this
+guard so the supervised process never starts without deps present. `ws` is the hard
+runtime dep (`ha-bridge.js:8` requires it at module load).
+
+**Node version bump:** upgrading Node forces a native rebuild of `node-pty` (the one
+native dep in the app). After any Node upgrade, re-run:
+```bash
+( cd mcp-task-router-app && npm ci )   # reinstall project deps incl. node-pty rebuild
+```
+`start-majordomos.sh` also triggers a re-install of the global/user-local `node-pty`
+prebuild automatically on first run after a Node bump (via `scripts/setup-app.sh`).
 
 ## Phase 1 — run the app + bring up the Majordomus PM (run on the Mac)
 

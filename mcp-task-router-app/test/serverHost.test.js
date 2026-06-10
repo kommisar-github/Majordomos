@@ -1,10 +1,19 @@
 'use strict';
 
-const { describe, test, before, after, beforeEach } = require('node:test');
+const { describe, test, before, after, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
+const fs     = require('node:fs');
 const http   = require('http');
+const os     = require('node:os');
+const path   = require('node:path');
 
-const { startServerHost, createHaExecutorServer, _configWriteStatus } = require('../src/serverHost');
+const {
+  startServerHost,
+  createHaExecutorServer,
+  _configWriteStatus,
+  _makeValidateCapToken,
+} = require('../src/serverHost');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -353,6 +362,108 @@ describe('POST /api/ha/config-write', () => {
     } finally {
       bridge.executeApprovedAction = origExecute;
     }
+  });
+});
+
+// ── _makeValidateCapToken — unit tests (B2/B4) ───────────────────────────────
+
+describe('_makeValidateCapToken', () => {
+  let sessionFile;
+  let savedEnv;
+
+  function makeToken() {
+    const raw  = `trha_${crypto.randomBytes(16).toString('hex')}`;
+    const hash = crypto.createHash('sha256').update(raw).digest('hex');
+    return { raw, hash };
+  }
+
+  function writeSession(obj) {
+    fs.writeFileSync(sessionFile, JSON.stringify(obj), { mode: 0o600 });
+  }
+
+  beforeEach(() => {
+    const uniq = crypto.randomBytes(4).toString('hex');
+    sessionFile = path.join(os.tmpdir(), `ha_devops_test_${uniq}.json`);
+    savedEnv = process.env.HA_DEVOPS_SESSION_PATH;
+    process.env.HA_DEVOPS_SESSION_PATH = sessionFile;
+  });
+
+  afterEach(() => {
+    try { fs.unlinkSync(sessionFile); } catch { /* already gone */ }
+    if (savedEnv === undefined) delete process.env.HA_DEVOPS_SESSION_PATH;
+    else process.env.HA_DEVOPS_SESSION_PATH = savedEnv;
+  });
+
+  // 1. valid token + registered agent → true
+  test('valid token + live session → true', async () => {
+    const { raw, hash } = makeToken();
+    writeSession({ cap_token_hash: hash, agent: 'ha_devops', registered_at: new Date().toISOString() });
+    const validate = _makeValidateCapToken({ isAgentLive: async () => true });
+    assert.equal(await validate(raw), true);
+  });
+
+  // 2. absent session file → false
+  test('absent session file → false', async () => {
+    // sessionFile path set but file not written
+    const validate = _makeValidateCapToken({ isAgentLive: async () => true });
+    assert.equal(await validate('trha_anything'), false);
+  });
+
+  // 3. corrupt JSON in session file → false
+  test('corrupt session JSON → false', async () => {
+    fs.writeFileSync(sessionFile, '{bad json', { mode: 0o600 });
+    const validate = _makeValidateCapToken({ isAgentLive: async () => true });
+    assert.equal(await validate('trha_anything'), false);
+  });
+
+  // 4. agent field is not 'ha_devops' → false
+  test("agent field !== 'ha_devops' → false", async () => {
+    const { raw, hash } = makeToken();
+    writeSession({ cap_token_hash: hash, agent: 'pm', registered_at: new Date().toISOString() });
+    const validate = _makeValidateCapToken({ isAgentLive: async () => true });
+    assert.equal(await validate(raw), false);
+  });
+
+  // 5. missing cap_token_hash → false
+  test('missing cap_token_hash → false', async () => {
+    const { raw } = makeToken();
+    writeSession({ agent: 'ha_devops', registered_at: new Date().toISOString() });
+    const validate = _makeValidateCapToken({ isAgentLive: async () => true });
+    assert.equal(await validate(raw), false);
+  });
+
+  // 6. null / non-string token → false
+  test('null and non-string token → false', async () => {
+    const { hash } = makeToken();
+    writeSession({ cap_token_hash: hash, agent: 'ha_devops', registered_at: new Date().toISOString() });
+    const validate = _makeValidateCapToken({ isAgentLive: async () => true });
+    assert.equal(await validate(null), false);
+    assert.equal(await validate(42), false);
+  });
+
+  // 7. stale / rotated token — hash mismatch → false
+  test('stale (rotated) token — hash mismatch → false', async () => {
+    const { raw } = makeToken();
+    const { hash: newHash } = makeToken(); // different session's hash
+    writeSession({ cap_token_hash: newHash, agent: 'ha_devops', registered_at: new Date().toISOString() });
+    const validate = _makeValidateCapToken({ isAgentLive: async () => true });
+    assert.equal(await validate(raw), false);
+  });
+
+  // 8. B1: hash matches but ha_devops not registered → false
+  test('B1: hash matches but ha_devops not live → false', async () => {
+    const { raw, hash } = makeToken();
+    writeSession({ cap_token_hash: hash, agent: 'ha_devops', registered_at: new Date().toISOString() });
+    // Simulates SIGKILL/crash: session file on disk, agent gone from registry
+    const validate = _makeValidateCapToken({ isAgentLive: async () => false });
+    assert.equal(await validate(raw), false);
+  });
+
+  // B4: session file must be mode 0600
+  test('B4: session file mode is 0600', () => {
+    const { hash } = makeToken();
+    writeSession({ cap_token_hash: hash, agent: 'ha_devops', registered_at: new Date().toISOString() });
+    assert.equal(fs.statSync(sessionFile).mode & 0o777, 0o600);
   });
 });
 

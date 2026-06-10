@@ -53,6 +53,35 @@ async function isTaskRouterUp() {
 // ── Cap-token validation (W3) ─────────────────────────────────────────────────
 
 /**
+ * Default liveness checker: queries /stats on the in-process task-router and
+ * returns true iff agentName appears in the agents list (within TTL).
+ * Fail-closed: network error, parse error, or server down → false.
+ */
+async function _defaultIsAgentLive(agentName) {
+  const port    = taskRouterPort();
+  const project = process.env.TASK_ROUTER_PROJECT || 'Majordomos';
+  return new Promise(resolve => {
+    const req = http.get(
+      `http://127.0.0.1:${port}/stats?project=${encodeURIComponent(project)}`,
+      res => {
+        let raw = '';
+        res.on('data', c => { raw += c; });
+        res.on('end', () => {
+          try {
+            const { agents = [] } = JSON.parse(raw);
+            resolve(agents.some(a => a.name === agentName));
+          } catch {
+            resolve(false);
+          }
+        });
+      },
+    );
+    req.setTimeout(2000, () => { req.destroy(); resolve(false); });
+    req.on('error', () => resolve(false));
+  });
+}
+
+/**
  * Build the validateCapToken hook wired into executeConfigWrite opts.
  *
  * Storage contract for /ops W4:
@@ -66,12 +95,20 @@ async function isTaskRouterUp() {
  *   - agent field !== "ha_devops"          → false
  *   - hash mismatch                        → false
  *   - presented token null/non-string      → false
+ *   - ha_devops not registered/live        → false  (B1 — session-binding gap)
  *
  * Session-binding: /ops W4 overwrites the file on every relaunch, so a stale
  * prior-session token's hash will not match the current session's hash → false.
  * On pty exit /ops deletes the file → all tokens fail closed.
+ * B1: a SIGKILL/crash that leaves the session file on disk is caught by the
+ * liveness check — the stale file-hash match alone is no longer sufficient.
+ *
+ * @param {{ isAgentLive?: (agentName: string) => Promise<boolean> }} [opts]
+ *   opts.isAgentLive — injectable for tests; production uses _defaultIsAgentLive.
  */
-function _makeValidateCapToken() {
+function _makeValidateCapToken(opts = {}) {
+  const isAgentLive = opts.isAgentLive || _defaultIsAgentLive;
+
   return async function validateCapToken(capToken) {
     if (!capToken || typeof capToken !== 'string') return false;
     let stored;
@@ -85,7 +122,19 @@ function _makeValidateCapToken() {
     const { cap_token_hash } = stored;
     if (typeof cap_token_hash !== 'string' || !cap_token_hash) return false;
     const presented = crypto.createHash('sha256').update(capToken).digest('hex');
-    return presented === cap_token_hash;
+    // Timing-safe compare — both are sha256 hex strings (same length).
+    let hashMatches;
+    try {
+      hashMatches = crypto.timingSafeEqual(
+        Buffer.from(presented, 'hex'),
+        Buffer.from(cap_token_hash, 'hex'),
+      );
+    } catch {
+      return false; // malformed stored hash (unexpected length)
+    }
+    if (!hashMatches) return false;
+    // B1: liveness check — stale-file-but-no-live-session ⇒ false.
+    return isAgentLive('ha_devops');
   };
 }
 
@@ -288,4 +337,5 @@ module.exports = {
   // Exported for testing (env-var override pattern)
   haDevopsSessionPath,
   _configWriteStatus,
+  _makeValidateCapToken,
 };

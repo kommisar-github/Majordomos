@@ -35,7 +35,34 @@ if command -v tailscale >/dev/null 2>&1; then
   if tailscale status >/dev/null 2>&1; then ok "tailscale up ($(tailscale ip -4 2>/dev/null | head -1))"; else bad "tailscale installed but not up (run: tailscale up)"; fi
 else warn "tailscale not found — required for the federation/HA mesh (G3) unless using LAN + TLS."; fi
 
+# mcp-task-router-app Node dependencies (ha-bridge.js requires 'ws' at module load)
+# package-lock.json is committed → use npm ci; fall back to npm install if lock absent.
+REPO_ROOT_PROV="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+APP_DEP_DIR="$REPO_ROOT_PROV/mcp-task-router-app"
+if [ -d "$APP_DEP_DIR" ]; then
+  if [ -d "$APP_DEP_DIR/node_modules" ]; then
+    ok "mcp-task-router-app node_modules present"
+  else
+    printf '  INFO  mcp-task-router-app/node_modules absent — installing...\n'
+    if [ -f "$APP_DEP_DIR/package-lock.json" ]; then
+      ( cd "$APP_DEP_DIR" && npm ci --silent ) \
+        && ok "mcp-task-router-app npm ci done" \
+        || bad "mcp-task-router-app npm ci failed — run manually: ( cd mcp-task-router-app && npm ci )"
+    else
+      ( cd "$APP_DEP_DIR" && npm install --silent ) \
+        && ok "mcp-task-router-app npm install done" \
+        || bad "mcp-task-router-app npm install failed"
+    fi
+  fi
+else
+  warn "mcp-task-router-app dir not found at $APP_DEP_DIR"
+fi
+
 # node-pty build toolchain (optional dep) — informational
+# NOTE: a Node version bump forces a native rebuild of node-pty (the one native dep).
+# After any Node upgrade, re-run install in mcp-task-router-app/ and the global node-pty:
+#   ( cd mcp-task-router-app && npm ci )   # project deps
+#   npm install -g node-pty                # or run start-majordomos.sh which auto-reinstalls
 warn "node-pty native build needs Xcode Command Line Tools: xcode-select --install"
 
 echo ""
