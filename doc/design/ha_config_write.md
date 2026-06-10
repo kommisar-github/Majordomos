@@ -575,6 +575,16 @@ raw firing primitive**. Record this as a standing constraint for any future chan
   trigger path" property is what blocks *indirectly* tripping an already-enabled
   automation, and it is invisible unless stated. The WS client's `call_service` ban
   (§5.3) is the same family of guarantee; keep them together.
+- **Cap-token validation decoupling (W4.6 `/review` MINOR-2 — standing constraint):**
+  the executor validates two independent sources of truth — the token **hash** from
+  the session **file** and the agent's **liveness** from the task-router **registry**
+  (`/stats` TTL). They are not bound to a single session identity; the design is safe
+  **only** because the launcher **overwrites the session file on every relaunch**
+  (one-hash-per-agent) and there is never more than one concurrent `ha_devops`. NEVER
+  add a code path that **appends or retains a prior hash**, permits **two concurrent
+  `ha_devops` sessions**, or stops overwriting the file on relaunch — any of those
+  reopens the stale-token window the W4.6 liveness check closed. Such a change
+  **requires fresh `/review`**.
 
 ---
 

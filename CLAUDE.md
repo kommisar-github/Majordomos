@@ -224,6 +224,12 @@ Terminal 1 (tab: "pm"):
 | `/pm mcp register` | Register PM with task router | — |
 | `/pm ping` | Ping all online agents, report health | — |
 
+> **`ha_devops` is Mode-4-only — never fork.** It carries the `no_fork` flag in
+> `agents.json`. If a config-write request targets `ha_devops` and it is **not**
+> registered/live, PM **refuses and tells the operator to launch its terminal**
+> (`bash host/launch-ha-devops.sh`) — PM must NOT fall back to a subagent fork, and
+> does not even send the Telegram confirm (no point confirming an undeployable change).
+
 ### Choosing a mode (manual override)
 - **Direct** — simple tasks, single-domain work, planning
 - **Agent Fork** (`/pm <request>` when agent offline) — automatic fallback
@@ -264,8 +270,9 @@ Use the `/` slash command to invoke an agent skill:
 | `/scm` | `.claude/skills/scm/SKILL.md` | Source Control |
 | `/arch` | `.claude/skills/arch/SKILL.md` | Architect |
 | `/review` | `.claude/skills/review/SKILL.md` | Architecture Review |
+| `/ha_devops` | `.claude/skills/ha_devops/SKILL.md` | HA config-write deployer — **Mode-4-only, never fork** (`no_fork`) |
 
-(Add rows as agents are created)
+(Add rows as agents are created. The full roster incl. `/app`, `/ha`, `/ops` lives in `.claude/SKILLS.md`.)
 
 ### Execution Modes
 

@@ -32,3 +32,4 @@ This index lists every rule file in the project, what domain it covers, which gl
 | /app | `.claude/rules/app.md` | node-pty supervisor + server host |
 | /ha | `.claude/rules/ha.md` | Home Assistant bidirectional bridge |
 | /ops | `.claude/rules/ops.md` | Federation, launchd, Tailscale, secrets |
+| /ha_devops | `.claude/rules/ha_devops.md` | HA config-write runtime deployer (Mode-4-only, never fork) |

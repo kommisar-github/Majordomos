@@ -65,5 +65,13 @@
     ],
     "role": "specialist",
     "model": "claude-sonnet-4-6"
+  },
+  "ha_devops": {
+    "capabilities": [
+      "ha-config-deploy"
+    ],
+    "role": "specialist",
+    "model": "claude-sonnet-4-6",
+    "no_fork": true
   }
 }

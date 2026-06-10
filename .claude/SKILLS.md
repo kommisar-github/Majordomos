@@ -48,3 +48,4 @@ You can also request: /pm propose an agent for <domain>.
 | app | `/app` | `mcp-task-router-app/src/{serverHost,supervisor,launchCommand}.js`, `mcp-task-router-app/bin/**` | node-pty supervisor + in-process server host | claude-sonnet-4-6 |
 | ha | `/ha` | `mcp-task-router-app/src/ha-bridge.js`, `doc/ha_integration.md` | Home Assistant bidirectional bridge | claude-sonnet-4-6 |
 | ops | `/ops` | `host/**`, `fleet/**`, `doc/{federation,host_ops}.md` | Federation wiring, launchd, Tailscale, secrets | claude-sonnet-4-6 |
+| ha_devops | `/ha_devops` | *(no source)* — `doc/runbooks/ha_deploy.md` | HA config-write runtime deployer — **Mode-4-only, never fork** (`no_fork`) | claude-sonnet-4-6 |

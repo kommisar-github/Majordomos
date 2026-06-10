@@ -101,6 +101,14 @@ trap _ha_devops_cleanup EXIT
 # HA_DEVOPS_CAP_TOKEN is exported here — raw token lives only in this env scope.
 # Not using exec so the EXIT trap fires when claude exits (exec would replace the
 # bash process and lose the trap).
+#
+# SECURITY: strip HA secrets from the child env BEFORE launching claude.
+# ha_devops must reach HA only through the loopback cap-token executor (port 3101),
+# not via raw curl with HA_TOKEN. The executor (app serverHost) holds HA_TOKEN
+# separately — ha_devops does not need it. Unset here makes the bypass
+# "structurally impossible" rather than "behaviorally unlikely".
+unset HA_TOKEN HA_BASE_URL
+
 export TASK_ROUTER_AGENT=ha_devops
 export TASK_ROUTER_PROJECT="${PROJECT}"
 export HA_DEVOPS_CAP_TOKEN="${CAP_TOKEN}"

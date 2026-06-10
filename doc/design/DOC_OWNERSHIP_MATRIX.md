@@ -58,6 +58,9 @@
 | `design/host_ops.md` | reference | `/ops` | `/pm` | macOS always-on host runbook: provisioning, headless claude auth, launchd, env wiring for HA/telegram secrets. |
 | `reference/ha_entity_catalog.md` | reference | `/ha` | `/pm` | Full HA entity inventory (4,997 entities): by area, by function, safety-tier annotation, Critical-list finalization input, solar inverter battery finding, v1 pruning checklist. |
 | `reference/inverter_battery_health.md` | reference | `/ha` | `/pm` | Deye inverter battery health baseline (2026-06-09): health snapshot, SoH calculator diagnosis (3 missing helpers → silent no-op), operator fix steps, monitoring candidates. |
+| `design/ha_config_write.md` | design | `/ha` | `/pm`, `/ha_devops` | Gated HA config-write (draft-disabled, human-enables); two-layer `/ha`+`ha_devops`; cap-token hard gate + body-scan + drift-safe undo. |
+| `ha_devops_GUIDELINES.md` | reference | `/ha_devops` | `/pm` | Durable guidelines for the runtime deployer; written via consolidation only. |
+| `runbooks/ha_deploy.md` | reference | `/ha_devops` | `/ha`, `/ops`, `/pm` | Operator runbook: launch `ha_devops`, deploy flow, enable-by-hand step, undo, W5 bring-up + W7 e2e. |
 
 ---
 
