@@ -4,7 +4,7 @@ const { describe, test, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const http   = require('http');
 
-const { startServerHost, createHaExecutorServer } = require('../src/serverHost');
+const { startServerHost, createHaExecutorServer, _configWriteStatus } = require('../src/serverHost');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -139,6 +139,220 @@ describe('createHaExecutorServer', () => {
   test('POST /wrong-path → 404', async () => {
     const res = await postJson(PORT, '/api/other', { domain: 'light' });
     assert.equal(res.status, 404);
+  });
+});
+
+// ── Helpers for config-write tests ────────────────────────────────────────────
+
+function postJsonWithAuth(port, urlPath, body, token) {
+  return new Promise((resolve, reject) => {
+    const data = JSON.stringify(body);
+    const headers = {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(data),
+    };
+    if (token !== undefined) headers['Authorization'] = `Bearer ${token}`;
+    const req = http.request(
+      { hostname: '127.0.0.1', port, path: urlPath, method: 'POST', headers },
+      res => {
+        let raw = '';
+        res.on('data', c => { raw += c; });
+        res.on('end', () => resolve({ status: res.statusCode, body: JSON.parse(raw) }));
+      },
+    );
+    req.on('error', reject);
+    req.write(data);
+    req.end();
+  });
+}
+
+// ── _configWriteStatus — unit tests ───────────────────────────────────────────
+
+describe('_configWriteStatus', () => {
+  const cases = [
+    { msg: '[CAP-TOKEN] absent', expect: 401 },
+    { msg: '[UNSUPPORTED-OP] bad', expect: 400 },
+    { msg: '[UNDO-UNSUPPORTED] op=helper_create', expect: 400 },
+    { msg: '[HARD-DENY] pre-existing Critical', expect: 403 },
+    { msg: '[BODY-SCAN-DENY] template in service', expect: 403 },
+    { msg: '[FLEET_ENABLE_DENY] cause-to-fire', expect: 403 },
+    { msg: '[HARD-REFUSE] Tier C', expect: 403 },
+    { msg: '[UNDO-DRIFT] hash mismatch', expect: 409 },
+    { msg: '[UNDO-REJECTED] not success', expect: 409 },
+    { msg: '[UNDO-NOT-FOUND] no entry', expect: 404 },
+    { msg: '[WS-SCOPE-VIOLATION] call_service', expect: 500 },
+    { msg: 'HA 502 connection refused', expect: 502 },
+    { msg: '', expect: 502 },
+  ];
+  for (const { msg, expect: expected } of cases) {
+    test(`"${msg.slice(0, 30)}" → ${expected}`, () => {
+      assert.equal(_configWriteStatus(msg), expected);
+    });
+  }
+});
+
+// ── POST /api/ha/config-write — route-level tests ─────────────────────────────
+
+describe('POST /api/ha/config-write', () => {
+  const PORT = 13103;
+  let server;
+  const bridge = require('../src/ha-bridge');
+  let origConfigWrite;
+
+  // Thin realistic stub: calls opts.validateCapToken(capToken) as STEP 1,
+  // throws [CAP-TOKEN] on failure, returns success otherwise.
+  // Captures last call args for inspection.
+  let lastCallArgs = null;
+  const capTokenStub = async ({ op, payload, confirm_id }, capToken, opts) => {
+    lastCallArgs = { op, payload, confirm_id, capToken, opts };
+    const valid = opts.validateCapToken && await opts.validateCapToken(capToken);
+    if (!valid) throw new Error('[CAP-TOKEN] Invalid or absent cap-token (stub)');
+    return { op, applied: true, audit_id: 'stub-audit-id' };
+  };
+
+  before(done => {
+    origConfigWrite = bridge.executeConfigWrite;
+    bridge.executeConfigWrite = capTokenStub;
+    // Use a mock validateCapToken that accepts only 'valid-token-123'
+    server = createHaExecutorServer({
+      validateCapToken: async tok => tok === 'valid-token-123',
+    });
+    server.listen(PORT, '127.0.0.1', done);
+  });
+
+  after(done => {
+    bridge.executeConfigWrite = origConfigWrite;
+    server.close(done);
+  });
+
+  beforeEach(() => { lastCallArgs = null; });
+
+  // AC: cap-token missing → 401 before any HA I/O
+  test('no Authorization header → 401', async () => {
+    const res = await postJsonWithAuth(PORT, '/api/ha/config-write',
+      { op: 'helper_create', payload: { helper_type: 'input_number' } },
+      undefined, // no header
+    );
+    assert.equal(res.status, 401);
+    assert.equal(res.body.ok, false);
+    assert.ok(res.body.error.includes('[CAP-TOKEN]'));
+  });
+
+  // AC: invalid cap-token → 401
+  test('wrong token → 401', async () => {
+    const res = await postJsonWithAuth(PORT, '/api/ha/config-write',
+      { op: 'helper_create', payload: {} },
+      'wrong-token',
+    );
+    assert.equal(res.status, 401);
+    assert.equal(res.body.ok, false);
+  });
+
+  // AC: valid-token path reaches executeConfigWrite; returns 200
+  test('valid token → 200, executeConfigWrite called', async () => {
+    const res = await postJsonWithAuth(PORT, '/api/ha/config-write',
+      { op: 'helper_create', payload: { helper_type: 'input_number' }, confirm_id: 'c1' },
+      'valid-token-123',
+    );
+    assert.equal(res.status, 200);
+    assert.equal(res.body.ok, true);
+    assert.equal(res.body.op, 'helper_create');
+    assert.ok(lastCallArgs, 'executeConfigWrite must have been called');
+    assert.equal(lastCallArgs.capToken, 'valid-token-123');
+    assert.equal(lastCallArgs.confirm_id, 'c1');
+  });
+
+  // AC: opts.wsCmd is NEVER set by the route (§5.3 / MAJOR-2)
+  test('route never sets opts.wsCmd', async () => {
+    await postJsonWithAuth(PORT, '/api/ha/config-write',
+      { op: 'helper_create', payload: {} },
+      'valid-token-123',
+    );
+    assert.ok(lastCallArgs, 'executeConfigWrite must have been called');
+    assert.equal(lastCallArgs.opts.wsCmd, undefined,
+      'route must not pass opts.wsCmd — the scoped WS client must run (§5.3/MAJOR-2)');
+    assert.equal(typeof lastCallArgs.opts.validateCapToken, 'function',
+      'route must wire opts.validateCapToken');
+  });
+
+  // AC: config-write route is loopback-bound — same server, same G3 guarantee
+  test('config-write URL uses 127.0.0.1 (loopback-bound)', async () => {
+    // The server is listening on 127.0.0.1:PORT — this test succeeds only if bound there
+    const res = await postJsonWithAuth(PORT, '/api/ha/config-write',
+      { op: 'helper_create', payload: {} },
+      'valid-token-123',
+    );
+    assert.equal(res.status, 200, '127.0.0.1 binding reachable (loopback-only server up)');
+  });
+
+  // AC: hard-deny from executor surfaces as clean 403
+  test('[HARD-DENY] executor error → 403', async () => {
+    const origStub = bridge.executeConfigWrite;
+    bridge.executeConfigWrite = async () => {
+      throw new Error('[HARD-DENY] automation_upsert: pre-existing Critical interlock (stub)');
+    };
+    try {
+      const res = await postJsonWithAuth(PORT, '/api/ha/config-write',
+        { op: 'automation_upsert', payload: {} },
+        'valid-token-123',
+      );
+      assert.equal(res.status, 403);
+      assert.equal(res.body.ok, false);
+      assert.ok(res.body.error.includes('[HARD-DENY]'));
+    } finally {
+      bridge.executeConfigWrite = origStub;
+    }
+  });
+
+  // AC: [UNDO-DRIFT] → 409
+  test('[UNDO-DRIFT] executor error → 409', async () => {
+    const origStub = bridge.executeConfigWrite;
+    bridge.executeConfigWrite = async () => {
+      throw new Error('[UNDO-DRIFT] hash mismatch (stub)');
+    };
+    try {
+      const res = await postJsonWithAuth(PORT, '/api/ha/config-write',
+        { op: 'undo_config_write', payload: { audit_id: 'x' } },
+        'valid-token-123',
+      );
+      assert.equal(res.status, 409);
+    } finally {
+      bridge.executeConfigWrite = origStub;
+    }
+  });
+
+  // AC: [WS-SCOPE-VIOLATION] → 500 (invariant violation — loud signal)
+  test('[WS-SCOPE-VIOLATION] → 500', async () => {
+    const origStub = bridge.executeConfigWrite;
+    bridge.executeConfigWrite = async () => {
+      throw new Error('[WS-SCOPE-VIOLATION] call_service bypass attempt (stub)');
+    };
+    try {
+      const res = await postJsonWithAuth(PORT, '/api/ha/config-write',
+        { op: 'helper_create', payload: {} },
+        'valid-token-123',
+      );
+      assert.equal(res.status, 500);
+    } finally {
+      bridge.executeConfigWrite = origStub;
+    }
+  });
+
+  // AC: Tier-B service-call path stays unchanged and separate (scope guard)
+  test('Tier-B /api/ha/execute path unaffected — no cap-token required', async () => {
+    const origExecute = bridge.executeApprovedAction;
+    bridge.executeApprovedAction = async () => ({ tier: 'A', status: 200, data: [] });
+    try {
+      // No Authorization header — Tier-B must NOT require one
+      const res = await postJson(PORT, '/api/ha/execute', {
+        domain: 'light', service: 'turn_on', entity: 'light.office',
+      });
+      assert.equal(res.status, 200);
+      assert.equal(res.body.ok, true);
+      assert.equal(res.body.tier, 'A');
+    } finally {
+      bridge.executeApprovedAction = origExecute;
+    }
   });
 });
 

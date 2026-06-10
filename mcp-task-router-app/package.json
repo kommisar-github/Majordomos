@@ -4,7 +4,7 @@
   "private": true,
   "engines": { "node": ">=18" },
   "scripts": {
-    "test": "node --test test/ha-bridge.test.js"
+    "test": "node --test test/ha-bridge.test.js test/serverHost.test.js test/supervisor.test.js"
   },
   "dependencies": {
     "ws": "^8.18.0"
