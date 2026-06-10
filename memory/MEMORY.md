@@ -10,6 +10,7 @@ Canonical project facts (architecture, decisions, failure modes) belong in
 ## Files
 
 - [HA MCP integration](ha-mcp-integration.md) — how Majordomus connects to Home Assistant (official HA MCP Server, SSE); wiring done, what's left
+- [HA devops hard gate](ha-devops-hard-gate.md) — operator rule: no ha_devops terminal running ⇒ zero HA changes; ha_devops is Task-Router-only, never forked; enforced at executor layer
 
 ## Update protocol
 

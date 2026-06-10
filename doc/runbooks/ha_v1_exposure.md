@@ -99,6 +99,28 @@ Filter by "switch".
 
 Until `set_shutters_to_min_light` is removed, the Tier-B cover gap remains open.
 
+### 3.5 Scene-exposure hygiene — un-expose scenes that re-enable an automation/script
+
+> **Why (from `doc/design/ha_config_write.md` §3.5 vector 2, operator opted in
+> 2026-06-10):** a `scene.turn_on` applies a saved snapshot — and a scene can encode
+> `automation.x: on` / `script.y: on`. Applying it calls `automation.turn_on` **under
+> the hood**, which is the one thing the config-write gate forbids the fleet from doing
+> (the "fleet can never cause an automation to fire" linchpin). But `scene.*` defaults
+> to **Tier-A (auto-allow)** and runs over the **raw MCP path with no code chokepoint**,
+> so the gate cannot intercept it. **L0 exposure is the only hard control.**
+
+**Action:** review your **operator-authored scenes**. For any scene whose stored state
+includes an `automation.*` or `script.*` entity set to `on`/`off`:
+
+1. In HA → Settings → Voice assistants → Expose, search **"scene"**.
+2. **Un-expose** any such scene (toggle off) so it cannot be applied via the MCP path.
+3. If you need that scene for automation purposes, keep it usable **inside HA** (it just
+   stops being remotely applicable by the fleet).
+4. Re-confirm with the §5 scan that no automation/script-encoding scene remains exposed.
+
+A scene that only sets lights/media/climate snapshots is fine to keep exposed (Tier A);
+only scenes that **flip an `automation.*`/`script.*` enabled-state** need un-exposing.
+
 ---
 
 ## 4. W2 — Read mitigation: REST path for un-exposed entities
