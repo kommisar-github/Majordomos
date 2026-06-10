@@ -14,5 +14,6 @@ fleet/ha_devops_session.json
 # NOTE: task-router.db is intentionally TRACKED (project coherence — task history travels
 # with the project). sql.js writes a single self-contained file (no -wal/-shm), so it's
 # git-safe. Commit it at quiescent points if you want clean snapshots.
+.claude/mcp/task-router/*.bak-*
 *.log
 node_modules/
