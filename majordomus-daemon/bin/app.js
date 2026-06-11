@@ -5,15 +5,15 @@
  * bin/app.js — Majordomus standalone app entrypoint.
  *
  * Default mode (safe alongside the VS Code extension):
- *   node mcp-task-router-app/bin/app.js
+ *   node majordomus-daemon/bin/app.js
  *
  *   Attaches to the running Task Router on 3100 (no 409 — health-check first)
  *   and mounts the HA config-write executor on 127.0.0.1:3101. Does NOT spawn
  *   a PM terminal; the extension already supervises the fleet.
  *
  * Supervisor mode (headless launchd deployment — do NOT use alongside the extension):
- *   MAJORDOMUS_SUPERVISE=1 node mcp-task-router-app/bin/app.js
- *   OR: node mcp-task-router-app/bin/app.js --supervise
+ *   MAJORDOMUS_SUPERVISE=1 node majordomus-daemon/bin/app.js
+ *   OR: node majordomus-daemon/bin/app.js --supervise
  *
  *   Also spawns the node-pty PM agent via supervisor.js (single agent, parity
  *   with extension terminals.ts spawn). The task-router is started in-process

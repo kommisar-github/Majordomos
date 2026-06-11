@@ -10,7 +10,7 @@
 
 | Decision | Choice |
 |---|---|
-| Host | **macOS**, headless Task Router **app** (`mcp-task-router-app/`) |
+| Host | **macOS**, headless Task Router **app** (`majordomus-daemon/`) |
 | Talks to | **PMs of all my projects** + **Home Assistant** |
 | HA direction | **Bidirectional** — Majordomus ↔ HA |
 | Project-PM topology | **Across LAN machines** (Mac + Windows/Jetson/… on the home network) |
@@ -52,7 +52,7 @@ Telegram; it dispatches across the house and the codebases.
 - `init.sh` seed to bootstrap the Majordomus project itself.
 
 **New work:**
-1. **HA bridge module** (`mcp-task-router-app/src/ha-bridge.js`) — bidirectional.
+1. **HA bridge module** (`majordomus-daemon/src/ha-bridge.js`) — bidirectional.
 2. **Majordomus PM skill** — a PM whose delegation targets are *federated project
    PMs* + *HA actions*, with safety gating on home/cross-project actions.
 3. **Fleet config** — projects (LAN address + federation token) + HA (URL + token).

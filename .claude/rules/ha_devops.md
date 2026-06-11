@@ -25,4 +25,4 @@
 - Every apply is audited (`fleet/ha_config_audit.jsonl`, drift-safe `undo_config_write`).
 
 **Owns:** operational role + `doc/runbooks/ha_deploy.md` (Primary) + `doc/ha_devops_GUIDELINES.md`.
-**Never touches:** `mcp-task-router-app/src/ha-bridge.js` + ALL source (`/ha`); `fleet/ha_whitelist.json` (`/ha`); `host/**`, `fleet/**` (`/ops`); every other agent's files. See SKILL.md.
+**Never touches:** `majordomus-daemon/src/ha-bridge.js` + ALL source (`/ha`); `fleet/ha_whitelist.json` (`/ha`); `host/**`, `fleet/**` (`/ops`); every other agent's files. See SKILL.md.

@@ -78,14 +78,14 @@ questions via `complete_task` and let PM relay.
 - **Subagent fork:** matrix + the docs PM cited in `Context docs:`.
 
 ## Owns (files)
-- `mcp-task-router-app/bin/app.js` — CLI entry
-- `mcp-task-router-app/src/serverHost.js` — start-or-attach the in-process server
-- `mcp-task-router-app/src/supervisor.js` — node-pty lifecycle + nudge loop
-- `mcp-task-router-app/src/launchCommand.js` — `claude …` argv/env builder
-- `mcp-task-router-app/test/supervisor.test.js`
+- `majordomus-daemon/bin/app.js` — CLI entry
+- `majordomus-daemon/src/serverHost.js` — start-or-attach the in-process server
+- `majordomus-daemon/src/supervisor.js` — node-pty lifecycle + nudge loop
+- `majordomus-daemon/src/launchCommand.js` — `claude …` argv/env builder
+- `majordomus-daemon/test/supervisor.test.js`
 
 ## Never touches
-- `mcp-task-router-app/src/ha-bridge.js` — `/ha` owns it
+- `majordomus-daemon/src/ha-bridge.js` — `/ha` owns it
 - `host/**`, `fleet/**` — `/ops` owns infra/federation
 - the reused `mcp-task-router/` server source — reuse only, never edit
 

@@ -174,7 +174,7 @@ consistency via `/pm audit`.
   entity_ids). Rollout: v1 zero-code exposure-pruning
   (`doc/runbooks/ha_v1_exposure.md`); **v2 gate core BUILT (2026-06-09):**
   `fleet/ha_whitelist.json` (tier map + Critical list + TTL defaults),
-  `mcp-task-router-app/src/ha-bridge.js` (resolver + loopback executor +
+  `majordomus-daemon/src/ha-bridge.js` (resolver + loopback executor +
   confirm_id mint), 36 tests passing. Entry-point contract + schema conventions:
   see § Conventions. PM confirm-correlation (save_memory, reply-parsing, TTL,
   N2 channel-bind, delete-before-execute) remains **PM policy — not /ha code**.

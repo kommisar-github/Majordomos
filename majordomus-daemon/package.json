@@ -1,5 +1,5 @@
 {
-  "name": "mcp-task-router-app",
+  "name": "majordomus-daemon",
   "version": "0.1.0",
   "private": true,
   "engines": { "node": ">=18" },

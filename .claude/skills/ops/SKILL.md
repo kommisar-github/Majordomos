@@ -84,7 +84,7 @@ questions via `complete_task` and let PM relay.
 - `host/provision.sh` — macOS preflight
 
 ## Never touches
-- `mcp-task-router-app/src/**` — `/app` and `/ha` own app/bridge code
+- `majordomus-daemon/src/**` — `/app` and `/ha` own app/bridge code
 - `doc/design/*` architecture authored by `/arch`
 
 ## Domain Knowledge

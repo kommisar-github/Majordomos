@@ -78,12 +78,12 @@ questions via `complete_task` and let PM relay.
 - **Subagent fork:** matrix + cited docs.
 
 ## Owns (files)
-- `mcp-task-router-app/src/ha-bridge.js` — bidirectional HA bridge
+- `majordomus-daemon/src/ha-bridge.js` — bidirectional HA bridge
 - `doc/ha_integration.md` — HA design + the inbound action whitelist
-- `mcp-task-router-app/test/ha-bridge.test.js`
+- `majordomus-daemon/test/ha-bridge.test.js`
 
 ## Never touches
-- `mcp-task-router-app/src/{serverHost,supervisor,launchCommand}.js` — `/app` owns runtime
+- `majordomus-daemon/src/{serverHost,supervisor,launchCommand}.js` — `/app` owns runtime
 - `host/**`, `fleet/**` — `/ops` owns federation/infra
 
 ## Domain Knowledge

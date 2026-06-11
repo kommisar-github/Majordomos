@@ -15,11 +15,11 @@
 ## 1. Project synthesis
 
 - **What we are building:** *Majordomus* — a headless, always-on **Task Router app**
-  (`mcp-task-router-app`) on **macOS** that runs one long-lived **Majordomus PM** and
+  (`majordomus-daemon`) on **macOS** that runs one long-lived **Majordomus PM** and
   acts as a household + cross-project orchestrator. It **federates to the PM of every
   project** over the LAN and integrates **bidirectionally with Home Assistant**;
   the operator drives it from **Telegram**.
-- **Codebase under bootstrap:** the standalone app (`mcp-task-router-app/`, currently
+- **Codebase under bootstrap:** the standalone app (`majordomus-daemon/`, currently
   **experimental v0.1.0**) plus a new **HA bridge** module. The Task Router **server is
   reused in-process** (`startServer()`) — no server logic is written here.
 - **v1 boundary:** (a) the standalone-app MVP finished to "server-host + node-pty
@@ -104,8 +104,8 @@ check (`PM.md` → Reserved agent names): `app`/`ha`/`ops` are all clear.
 - **Subagent fork:** matrix + `Context docs:` only (PM rarely runs as a fork)
 
 **Never touches:**
-- `mcp-task-router-app/src/**` — `app` owns app code
-- `mcp-task-router-app/src/ha-bridge.js` — `ha` owns the HA module
+- `majordomus-daemon/src/**` — `app` owns app code
+- `majordomus-daemon/src/ha-bridge.js` — `ha` owns the HA module
 - `host/launchd/*.plist`, federation token secrets — `ops` owns infra/secrets
 
 **SKILL.md domain knowledge:**
@@ -121,7 +121,7 @@ check (`PM.md` → Reserved agent names): `app`/`ha`/`ops` are all clear.
 
 **Owns:** `doc/design/*.md` (authors/updates design docs: `app_runtime.md`, `ha_integration.md`, `federation.md`, `host_ops.md`)
 **Context:** matrix first; dedicated → all design docs; fork → matrix + cited docs.
-**Never touches:** any `mcp-task-router-app/src/**` (implementation is `app`/`ha`), `agents.json` (pm/ops), launchd plists (`ops`).
+**Never touches:** any `majordomus-daemon/src/**` (implementation is `app`/`ha`), `agents.json` (pm/ops), launchd plists (`ops`).
 **SKILL.md domain knowledge:**
 - **Reuse, don't rebuild:** Majordomus imports `startServer()` from `mcp-task-router/src/index.js` in-process; if a server is already live on the port, **attach** (don't double-start — the project lock returns 409). No server code changes are in scope.
 - Boundary map: app-runtime (node-pty + supervisor) vs ha-bridge vs federation-client vs host/launchd — keep them separately ownable.
@@ -156,11 +156,11 @@ check (`PM.md` → Reserved agent names): `app`/`ha`/`ops` are all clear.
 **Role:** specialist · **Model:** `claude-sonnet-4-6` · **Capabilities:** node-pty, supervisor, server-host, web-ui
 
 **Owns (files):**
-- `mcp-task-router-app/bin/app.js` — CLI entry
-- `mcp-task-router-app/src/serverHost.js` — start-or-attach the in-process server
-- `mcp-task-router-app/src/supervisor.js` — node-pty lifecycle + nudge loop
-- `mcp-task-router-app/src/launchCommand.js` — `claude …` argv/env builder
-- `mcp-task-router-app/test/supervisor.test.js`
+- `majordomus-daemon/bin/app.js` — CLI entry
+- `majordomus-daemon/src/serverHost.js` — start-or-attach the in-process server
+- `majordomus-daemon/src/supervisor.js` — node-pty lifecycle + nudge loop
+- `majordomus-daemon/src/launchCommand.js` — `claude …` argv/env builder
+- `majordomus-daemon/test/supervisor.test.js`
 
 **Context:** matrix first; dedicated → `doc/app_runtime.md` + `doc/design/…`; fork → matrix + cited.
 **Never touches:** `src/ha-bridge.js` (`ha`), launchd plists / Tailscale (`ops`), the reused `mcp-task-router/` server source (out of scope — reuse only).
@@ -177,9 +177,9 @@ check (`PM.md` → Reserved agent names): `app`/`ha`/`ops` are all clear.
 **Role:** specialist · **Model:** `claude-sonnet-4-6` · **Capabilities:** home-assistant, rest, websocket, mcp, safety-gate
 
 **Owns (files):**
-- `mcp-task-router-app/src/ha-bridge.js` — bidirectional HA bridge
+- `majordomus-daemon/src/ha-bridge.js` — bidirectional HA bridge
 - `doc/ha_integration.md` — HA design + the inbound action whitelist
-- `mcp-task-router-app/test/ha-bridge.test.js`
+- `majordomus-daemon/test/ha-bridge.test.js`
 
 **Context:** matrix first; dedicated → `doc/ha_integration.md`; fork → matrix + cited.
 **Never touches:** supervisor/server-host (`app`), federation client (`ops`), launchd (`ops`).
@@ -260,8 +260,8 @@ check (`PM.md` → Reserved agent names): `app`/`ha`/`ops` are all clear.
 | arch | `/arch` | `doc/design/**` | Fleet architecture / design docs | 1M Opus (default) |
 | review | `/review` | *(manual)* | Risk & safety audit (H1/G3/secrets) | 1M Opus (default) |
 | scm | `/scm` | *(manual)* | Git for the majordomus repo | claude-haiku-4-5 |
-| app | `/app` | `mcp-task-router-app/src/{serverHost,supervisor,launchCommand}.js`, `mcp-task-router-app/bin/**` | node-pty supervisor + in-process server host | claude-sonnet-4-6 |
-| ha | `/ha` | `mcp-task-router-app/src/ha-bridge.js`, `doc/ha_integration.md` | Home Assistant bidirectional bridge | claude-sonnet-4-6 |
+| app | `/app` | `majordomus-daemon/src/{serverHost,supervisor,launchCommand}.js`, `majordomus-daemon/bin/**` | node-pty supervisor + in-process server host | claude-sonnet-4-6 |
+| ha | `/ha` | `majordomus-daemon/src/ha-bridge.js`, `doc/ha_integration.md` | Home Assistant bidirectional bridge | claude-sonnet-4-6 |
 | ops | `/ops` | `host/**`, `fleet/**`, `doc/{federation,host_ops}.md` | Federation wiring, launchd, Tailscale, secrets | claude-sonnet-4-6 |
 
 ---
@@ -296,7 +296,7 @@ Paste into `doc/design/DOC_OWNERSHIP_MATRIX.md` per `PM_TEMPLATES.md → ## DOC_
 ```
 ## Abstract
 **TL;DR:** node-pty supervisor + in-process Task Router server host for the Majordomus PM.
-**Load when:** node-pty, pty, supervisor, nudge, watchdog, startServer, server-host, attach, 409, lock, bracket-paste, launchCommand, argv, unregister, green, Stop hook, claude spawn, mcp-task-router-app, bin/app.js
+**Load when:** node-pty, pty, supervisor, nudge, watchdog, startServer, server-host, attach, 409, lock, bracket-paste, launchCommand, argv, unregister, green, Stop hook, claude spawn, majordomus-daemon, bin/app.js
 **Key facts:** one PM agent only; reuse startServer() in-process; attach if /health up; nudge ~10s; never while-true.
 **Owner:** /app   **Related:** doc/design/host_ops.md, doc/design/federation.md
 ```
@@ -519,7 +519,7 @@ Cross-specialist contracts are §7 C1–C4; everything else fans out through PM.
 - `Q-HA-WHITELIST:` Which HA actions are **immediate** vs **confirmation-required**? (Proposed default: reads + non-destructive `light`/`scene`/`notify` immediate; `lock`/`alarm_control_panel`/`cover`/`climate` setpoints + any cross-project write require Telegram confirm.)
 - `Q-NETWORK:` **Tailscale** (recommended) vs LAN-bind + API key + TLS for the federation/HA-inbound mesh? Affects `host_ops.md` + G3 binding.
 - `Q-MAJ-LOCATION:` **RESOLVED** — its own repo: **`github.com/kommisar-github/Majordomos`**. `/scm` owns that repo.
-- `Q-APP-VENDORING:` **RESOLVED (v1): install-on-host, do not vendor.** The app imports the server via a sibling path (`../../mcp-task-router`) and is a *tool pointed at projects*; for v1 it's installed from a `claude-task-router` clone on the Mac (see `host/run-majordomus.sh` + `doc/design/host_ops.md`). Majordomos stays config-only. The Majordomus-specific **HA bridge** home is deferred to Phase 5 (likely a project-loaded module so it lives here without forking the shared app). *(Consequence: `/app`'s "Owns" paths under `mcp-task-router-app/` refer to the seed-repo app it operates against; `/app` work on the MVP happens in the seed repo until/unless a project-loaded extension point is added.)*
+- `Q-APP-VENDORING:` **RESOLVED (v1): install-on-host, do not vendor.** The app imports the server via a sibling path (`../../mcp-task-router`) and is a *tool pointed at projects*; for v1 it's installed from a `claude-task-router` clone on the Mac (see `host/run-majordomus.sh` + `doc/design/host_ops.md`). Majordomos stays config-only. The Majordomus-specific **HA bridge** home is deferred to Phase 5 (likely a project-loaded module so it lives here without forking the shared app). *(Consequence: `/app`'s "Owns" paths under `majordomus-daemon/` refer to the seed-repo app it operates against; `/app` work on the MVP happens in the seed repo until/unless a project-loaded extension point is added.)*
 
 ---
 

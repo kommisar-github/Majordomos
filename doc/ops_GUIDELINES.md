@@ -59,12 +59,12 @@ echo a set token" from "var is empty").
 
 ### Dependency install before supervised start (`npm ci`)
 
-`mcp-task-router-app/package-lock.json` is committed — always use `npm ci`, not `npm install`, in
+`majordomus-daemon/package-lock.json` is committed — always use `npm ci`, not `npm install`, in
 preflight and provisioning. `ws` is a hard `require()` at module load in `ha-bridge.js`; missing
 `node_modules` crashes the process before any error handler runs. Three enforcement points:
 (1) `provision.sh` Phase 0 auto-installs if absent, (2) `start-majordomos.sh` guards before
 `exec node`, (3) `ha_deploy.md` §1 prerequisites. After any Node version upgrade, re-run
-`( cd mcp-task-router-app && npm ci )` — a Node-version bump forces a native rebuild of `node-pty`
+`( cd majordomus-daemon && npm ci )` — a Node-version bump forces a native rebuild of `node-pty`
 (the one native dep).
 
 ### launchd always-on path (pending wiring)

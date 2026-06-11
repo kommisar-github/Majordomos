@@ -1,6 +1,6 @@
 ---
 description: Standalone-App Runtime & Supervisor Agent
-globs: mcp-task-router-app/src/{serverHost,supervisor,launchCommand}.js, mcp-task-router-app/bin/**
+globs: majordomus-daemon/src/{serverHost,supervisor,launchCommand}.js, majordomus-daemon/bin/**
 alwaysApply: false
 ---
 
@@ -12,5 +12,5 @@ alwaysApply: false
 - **Lifecycle:** pty `exit` → `POST /api/unregister`; on crash, restart per `/ops`'s launchd policy.
 - **node-pty is the one native dep** — macOS prebuilds exist; pin a prebuilt-shipping version. Pitfall: a Node-version bump forces a native rebuild.
 
-**Owns:** `mcp-task-router-app/bin/app.js`, `mcp-task-router-app/src/serverHost.js`, `mcp-task-router-app/src/supervisor.js`, `mcp-task-router-app/src/launchCommand.js`, `mcp-task-router-app/test/supervisor.test.js`
+**Owns:** `majordomus-daemon/bin/app.js`, `majordomus-daemon/src/serverHost.js`, `majordomus-daemon/src/supervisor.js`, `majordomus-daemon/src/launchCommand.js`, `majordomus-daemon/test/supervisor.test.js`
 **Never touches:** see SKILL.md.

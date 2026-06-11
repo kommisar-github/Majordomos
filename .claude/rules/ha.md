@@ -1,6 +1,6 @@
 ---
 description: Home Assistant Integration Agent
-globs: mcp-task-router-app/src/ha-bridge.js, doc/ha_integration.md
+globs: majordomus-daemon/src/ha-bridge.js, doc/ha_integration.md
 alwaysApply: false
 ---
 
@@ -12,5 +12,5 @@ alwaysApply: false
 - **HA MCP** (optional, Q-HA-TRANSPORT): HA **MCP Server** integration exposes Assist intents as MCP tools over SSE (Majordomus→HA); HA **MCP Client** connects HA to the app `/mcp` (HA Assist→Majordomus). REST is the v1 path.
 - **Inbound (HA→Majordomus):** HA automation/Assist → `POST /api/dispatch` (to `pm`) or HA MCP-client → `/mcp`. Tag every inbound request `[HA REQUEST]` so PM applies the confirmation gate.
 
-**Owns:** `mcp-task-router-app/src/ha-bridge.js`, `doc/ha_integration.md`, `mcp-task-router-app/test/ha-bridge.test.js`
+**Owns:** `majordomus-daemon/src/ha-bridge.js`, `doc/ha_integration.md`, `majordomus-daemon/test/ha-bridge.test.js`
 **Never touches:** see SKILL.md.

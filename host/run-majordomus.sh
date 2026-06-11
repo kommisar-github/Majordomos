@@ -7,7 +7,7 @@
 set -eu
 SEED_REPO="${SEED_REPO:-$HOME/GitHub/claude-task-router}"
 MAJ_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-APP="$SEED_REPO/mcp-task-router-app"
+APP="$SEED_REPO/majordomus-daemon"
 [ -d "$APP" ] || { echo "seed app not found at $APP — set SEED_REPO to your claude-task-router clone"; exit 1; }
 [ -d "$SEED_REPO/mcp-task-router" ] || { echo "server not found at $SEED_REPO/mcp-task-router (the app imports it via ../../)"; exit 1; }
 ( cd "$APP" && [ -d node_modules ] || npm install )

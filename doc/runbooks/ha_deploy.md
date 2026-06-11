@@ -23,7 +23,7 @@ Before launching `ha_devops`, confirm all of the following:
 
 | Requirement | How to verify |
 |---|---|
-| `mcp-task-router-app` deps installed | `ls mcp-task-router-app/node_modules/ws` — if absent: `( cd mcp-task-router-app && npm ci )` |
+| `majordomus-daemon` deps installed | `ls majordomus-daemon/node_modules/ws` — if absent: `( cd majordomus-daemon && npm ci )` |
 | Task Router running on port 3100 | `curl -s http://127.0.0.1:3100/health` → 200 |
 | `HA_BASE_URL` in `.env` | e.g. `HA_BASE_URL=http://homeassistant.local:8123` |
 | `HA_TOKEN` in `.env` | HA long-lived access token (Settings → Profile → Long-Lived Access Tokens) |

@@ -155,7 +155,7 @@ direct question if the user typed one.
 - `doc/ha_devops_GUIDELINES.md` — your durable guidelines (via consolidation only).
 
 ## Never touches
-- `mcp-task-router-app/src/ha-bridge.js` and **all** source — `/ha` owns the executor
+- `majordomus-daemon/src/ha-bridge.js` and **all** source — `/ha` owns the executor
   code; you operate it, you never edit it.
 - `fleet/ha_whitelist.json` — `/ha` owns the tier/deny data.
 - `host/**`, `fleet/**` — `/ops` owns infra/secrets (the launcher mints your token;
