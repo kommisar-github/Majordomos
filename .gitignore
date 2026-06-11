@@ -17,3 +17,4 @@ fleet/ha_devops_session.json
 .claude/mcp/task-router/*.bak-*
 *.log
 node_modules/
+.seedsync-backup-*

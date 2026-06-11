@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# launcher-rev: 3   (bump when this template changes; the IDE auto-refreshes a project's
+# launcher-rev: 4   (bump when this template changes; the IDE auto-refreshes a project's
 #                    launchers when the bundled rev is higher — seedSync.ts. Absent = rev 0.)
 # start-Majordomos — launch the headless Task Router host for this project,
 # using the app bundled inside your installed Task Router extension. No per-project
@@ -15,15 +15,12 @@
 #   UI_PORT=3201 ./start-Majordomos.sh
 # Restart the shared server on start (e.g. after an extension update):
 #   RESTART_SERVER=1 ./start-Majordomos.sh   (or pass --restart-server)
-# Mode (default = control: this App owns the agents + a live terminal; closing it stops
-# the fleet — the original in-house behavior):
-#   ./start-Majordomos.sh --detached    agents run in their OWN terminal windows
-#       (alias: --observe)                     that survive this App. On start it reconciles
-#                                              against the server's live fleet (adopt vs
-#                                              launch). Closing this window leaves the fleet
-#                                              running; reconnect by re-running --detached.
-#                                              There is no live terminal in the dashboard —
-#                                              talk to an agent from its own window.
+# Launch kind is chosen PER AGENT in the dashboard (In-house: live terminal here, dies with
+# the App / Detached: own window, survives the App). These flags only set the DEFAULT kind
+# for "Launch All" / a card's primary click:
+#   ./start-Majordomos.sh --inhouse     default to in-house (this is the default).
+#   ./start-Majordomos.sh --detached    default to detached (alias: --observe).
+#                                             Either way you can pick the other per agent.
 # Remote access (default is local-only): bind the server / dashboard to a LAN IP
 # or 0.0.0.0. The server's remote surface is /api/federation/* (grant tokens) +
 # /health only; the dashboard (UI_HOST) has NO auth, so trusted networks only:
