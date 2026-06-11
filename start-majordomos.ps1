@@ -1,3 +1,5 @@
+# launcher-rev: 3   (bump when this template changes; the IDE auto-refreshes a project's
+#                    launchers when the bundled rev is higher — seedSync.ts. Absent = rev 0.)
 # start-Majordomos.ps1 — launch the headless Task Router host for this project
 # on Windows, using the app bundled inside your installed Task Router extension. No
 # per-project server/app copy: the app finds the extension's bundled server and starts
@@ -6,12 +8,19 @@
 #   Right-click -> Run with PowerShell, or:   pwsh -File .\start-Majordomos.ps1
 #   Second project on its own UI port:         $env:UI_PORT=3201; .\start-Majordomos.ps1
 #   Restart the shared server on start:        .\start-Majordomos.ps1 -RestartServer
+#   Default mode is CONTROL: this App owns the agents + a live terminal; closing it
+#     stops the fleet (the original in-house behavior).
+#   Detached mode (agents run in their OWN windows, survive this App):
+#                                              .\start-Majordomos.ps1 -Detached
+#     (alias: -Observe). On start it reconciles against the server's live fleet (adopt
+#     vs launch). Closing this window leaves the fleet running; reconnect by re-running
+#     -Detached. No live terminal in the dashboard — talk to an agent from its window.
 #   No-IDE box: set $env:TASK_ROUTER_APP to ...\app\bin\app.js
 #   Remote access (default local-only): bind to a LAN IP or 0.0.0.0. The server's
 #   remote surface is /api/federation/* (grant tokens) + /health only; the
 #   dashboard (UI host) has NO auth, so use a trusted network only:
 #     $env:TASK_ROUTER_HOST='0.0.0.0'; $env:TASK_ROUTER_UI_HOST='0.0.0.0'; .\start-Majordomos.ps1
-param([switch]$RestartServer)
+param([switch]$RestartServer, [switch]$Detached, [switch]$Observe, [switch]$StopHost)
 $ErrorActionPreference = 'Stop'
 $ProjectRoot = $PSScriptRoot
 $ProjectName = 'Majordomos'
@@ -72,6 +81,12 @@ if (-not $ptyOk) {
 
 $cliArgs = @('--project', "$ProjectName=$ProjectRoot", '--ui-port', "$UiPort", '--host', $BindHost, '--ui-host', $UiHost)
 if ($RestartServer -or $env:RESTART_SERVER -eq '1') { $cliArgs += '--restart-server' }
+# Detached mode: agents run in their own terminals and survive this App (closing it
+# leaves the fleet running). Explicit switches (passing raw --flags through PowerShell is
+# unreliable). $env:TASK_ROUTER_APP_MODE (control|detached) is also honored by the app.
+$wantDetached = $Detached -or $Observe -or ($env:TASK_ROUTER_APP_MODE -in @('detached','observe','observer'))
+if ($wantDetached) { $cliArgs += '--detached' }
+if ($StopHost) { $cliArgs += '--stop-host' }
 $UiUrlHost = if ($UiHost -eq '0.0.0.0') { '<this-host-ip>' } else { $UiHost }
 Write-Host "Majordomos host -> http://${UiUrlHost}:$UiPort  (app: $App)"
 if ($BindHost -ne '127.0.0.1') { Write-Host "  remote federation enabled on ${BindHost}:3100 - callers need a grant token (trtok_...); open the firewall port." -ForegroundColor Yellow }
