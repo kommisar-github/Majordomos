@@ -33,15 +33,15 @@ const CONFIG_WRITE_OPS = new Set([
 // 'call_service' and all non-config types are explicitly BANNED — they would
 // bypass fleet_enable_deny and classify() gates entirely (§5.5 invariant).
 const WS_ALLOWED_TYPES = new Set([
-  'input_number/create',   'input_number/update',   'input_number/delete',
-  'input_boolean/create',  'input_boolean/update',  'input_boolean/delete',
-  'input_text/create',     'input_text/update',     'input_text/delete',
-  'input_select/create',   'input_select/update',   'input_select/delete',
-  'input_datetime/create', 'input_datetime/update', 'input_datetime/delete',
-  'input_button/create',   'input_button/update',   'input_button/delete',
-  'counter/create',        'counter/update',        'counter/delete',
-  'timer/create',          'timer/update',          'timer/delete',
-  'schedule/create',       'schedule/update',       'schedule/delete',
+  'input_number/create',   'input_number/update',   'input_number/delete',   'input_number/list',
+  'input_boolean/create',  'input_boolean/update',  'input_boolean/delete',  'input_boolean/list',
+  'input_text/create',     'input_text/update',     'input_text/delete',     'input_text/list',
+  'input_select/create',   'input_select/update',   'input_select/delete',   'input_select/list',
+  'input_datetime/create', 'input_datetime/update', 'input_datetime/delete', 'input_datetime/list',
+  'input_button/create',   'input_button/update',   'input_button/delete',   'input_button/list',
+  'counter/create',        'counter/update',        'counter/delete',        'counter/list',
+  'timer/create',          'timer/update',          'timer/delete',          'timer/list',
+  'schedule/create',       'schedule/update',       'schedule/delete',       'schedule/list',
   'config_entries/flow/init', 'config_entries/flow/progress',
   'config_entries/flow/cancel', 'config_entries/remove',
 ]);
@@ -906,29 +906,56 @@ async function _helperDelete(payload, confirm_id, wl, opts) {
   if (!entry_id && !object_id) throw new Error('helper_delete: payload.entry_id or payload.object_id required');
 
   const type = `${helper_type}/delete`;
+  const wsCmd = opts.wsCmd || _executeWsCommandDefault;
   let cmdPayload;
+
   if (object_id) {
-    // Storage-based helpers have no config-entry UUID — HA delete command uses entity_id.
-    // Normalize (trim+lowercase) before _isCritical — mirrors classifyEntity §4(f) to close
-    // the case/whitespace bypass (object_id="Master_Safety" / " master_safety" must hit the guard).
-    // Trim object_id BEFORE concatenation so interior whitespace (e.g. " master") is removed.
+    // Normalize BEFORE Critical check (§4(f)): trim object_id before concat to catch interior whitespace.
     const entityId = `${helper_type}.${(object_id || '').trim()}`.toLowerCase();
+
+    // STEP 1: Critical interlock guard — must run BEFORE any I/O (no TOCTOU).
+    // The resolved storage id below is matched only against this same entityId, so the
+    // Critical-checked entity and the deleted entity are always identical.
     if (_isCritical(entityId, wl)) {
       throw new Error(
         `[HARD-DENY] helper_delete: "${entityId}" is a Critical entity — cannot delete a safety interlock (§3.4).`
       );
     }
-    cmdPayload = { entity_id: entityId };
+
+    // STEP 2: Resolve storage id via <helper_type>/list (read-only).
+    // HA's delete command takes <helper_type>_id (e.g. input_number_id), not entity_id.
+    const listType = `${helper_type}/list`;
+    _scopedWsSend(listType, {}); // scope-guard on list (read-only, but still scoped)
+    let entries;
+    try {
+      entries = await wsCmd(listType, {});
+    } catch (err) {
+      _appendAudit({ op: 'helper_delete', confirm_id, payload, outcome: 'failure', error: `list failed: ${err.message}` });
+      throw err;
+    }
+
+    // Match on normalized entity_id — HA may include entity_id directly or we derive from id.
+    const match = Array.isArray(entries) && entries.find(e => {
+      const eId = e.entity_id ? e.entity_id.toLowerCase() : `${helper_type}.${e.id}`;
+      return eId === entityId;
+    });
+    if (!match) {
+      const err = new Error(`[HELPER-NOT-FOUND] helper_delete: no "${helper_type}" entry matching "${entityId}" — delete refused (fail-closed).`);
+      _appendAudit({ op: 'helper_delete', confirm_id, payload, outcome: 'failure', error: err.message });
+      throw err;
+    }
+
+    // Use the per-type id key: input_number_id, input_boolean_id, counter_id, etc.
+    cmdPayload = { [`${helper_type}_id`]: match.id };
   } else {
-    // Config-entry-based helper (config_entry_id is not null): use entry_id
+    // Config-entry-based helper (config_entry_id is not null): use entry_id as before.
     cmdPayload = { entry_id };
   }
 
   // §6 limitation: helper_delete is irreversible via undo_config_write. Storage-based helpers
   // carry no `prior` config retrievable by REST — there is no undo branch for this op.
   // The audit record below is detective-only; manual re-creation is the recovery path.
-  _scopedWsSend(type, cmdPayload); // structural scope-guard
-  const wsCmd = opts.wsCmd || _executeWsCommandDefault;
+  _scopedWsSend(type, cmdPayload); // structural scope-guard on the delete itself
   let result;
   try {
     result = await wsCmd(type, cmdPayload);
@@ -1041,7 +1068,7 @@ async function _executeUndo({ payload, confirm_id }, capToken, opts) {
     return { op: 'undo_config_write', applied: true, audit_id: undoAuditId, undoes: audit_id, ...undoResult };
   }
 
-  // helper_create undo: delete the created storage-based helper by entity_id
+  // helper_create undo: delete the created storage-based helper via list → id resolution
   if (originalOp === 'helper_create') {
     const helper_type = entry.payload && entry.payload.helper_type;
     // HA's storage create response includes `id` = the object_id of the created helper
@@ -1055,10 +1082,9 @@ async function _executeUndo({ payload, confirm_id }, capToken, opts) {
         `(result.id="${entry.result && entry.result.id}") — cannot determine which helper to delete.`
       );
     }
-    // Normalize (trim+lowercase) before _isCritical — same §4(f) invariant as classifyEntity
-    // and _helperDelete: closes case/whitespace bypass (result.id="Master_Safety"/" master_safety").
-    // Trim created_object_id BEFORE concatenation so interior whitespace is removed.
+    // Normalize BEFORE Critical check (trim before concat to catch interior whitespace, §4(f)).
     const entityId = `${helper_type}.${(created_object_id || '').trim()}`.toLowerCase();
+    // STEP 1: Critical guard BEFORE any I/O (same TOCTOU guarantee as _helperDelete).
     if (_isCritical(entityId, wl)) {
       throw new Error(
         `[HARD-DENY] undo helper_create: "${entityId}" is a Critical entity — delete is denied (§3.4).`
@@ -1068,9 +1094,28 @@ async function _executeUndo({ payload, confirm_id }, capToken, opts) {
     // REST-readable `post_hash` equivalent — we cannot verify HA state matches what we wrote.
     // Recorded in the audit below; operator should verify entity state in HA before undoing
     // if concurrent edits are possible.
+
+    // STEP 2: Resolve storage id via <helper_type>/list (same as _helperDelete object_id path).
     const wsCmd = opts.wsCmd || _executeWsCommandDefault;
+    const listType = `${helper_type}/list`;
+    _scopedWsSend(listType, {});
+    let entries;
+    try {
+      entries = await wsCmd(listType, {});
+    } catch (err) {
+      _appendAudit({ op: 'undo_config_write', confirm_id, undoes_audit_id: audit_id, outcome: 'failure', error: `list failed: ${err.message}` });
+      throw err;
+    }
+    const match = Array.isArray(entries) && entries.find(e => {
+      const eId = e.entity_id ? e.entity_id.toLowerCase() : `${helper_type}.${e.id}`;
+      return eId === entityId;
+    });
+    if (!match) {
+      throw new Error(`[HELPER-NOT-FOUND] undo helper_create: no "${helper_type}" entry matching "${entityId}" — delete refused (fail-closed).`);
+    }
+
     const deleteType = `${helper_type}/delete`;
-    const cmdPayload = { entity_id: entityId };
+    const cmdPayload = { [`${helper_type}_id`]: match.id };
     _scopedWsSend(deleteType, cmdPayload);
     let deleteResult;
     try {
