@@ -2,7 +2,7 @@
 
 **Purpose:** Project-agnostic PM agent template. Copy into a new project and customize.
 **Creates:** `.claude/skills/pm/SKILL.md` + `.claude/rules/project.md` + `.claude/SKILLS.md` + `.claude/rules/INDEX.md` + MCP task router
-**Version:** 4.12 (2026-06-09)
+**Version:** 4.13 (2026-06-12)
 **Templates:** All copy-paste templates are in **`PM_TEMPLATES.md`** (companion file).
 
 ---
@@ -444,6 +444,7 @@ Create `agents.json` in `.claude/mcp/task-router/` to define your agent roster:
 | `capabilities` | Yes | string[] | Domain keywords | Used by PM for routing decisions |
 | `role` | Yes | string | `coordinator` or `specialist` | Informational; also drives the optional `modelByRole` fallback |
 | `model` | No | string | Model ID (e.g. `claude-sonnet-4-6`, `claude-haiku-4-5`) | Explicit per-agent model. **Never set for coordinator role** (see 1M context warning above). Recommended for specialists — set it here rather than relying on IDE-level settings. |
+| `launcher` | No | string | Path to a launcher script, relative to the project root | **Custom launcher** — when an agent needs a special start sequence (mint a token, set env, register, etc.), point this at a script and it runs **instead of** the default `claude …`. Absent ⇒ the default launch. See "Custom launchers" below for the contract. |
 
 **Example:**
 ```json
@@ -462,6 +463,52 @@ Create `agents.json` in `.claude/mcp/task-router/` to define your agent roster:
 > **Specialists get an explicit `model` field.** Set it directly in `agents.json` — it's project-local, git-tracked, and unambiguous. The IDE-level `taskRouter.modelByRole` setting still works as a fallback for agents that omit `model`, but seed docs recommend the explicit form so every roster makes its model choices visible.
 
 > **Reserved agent names — do NOT use.** The extension launches each specialist terminal with `claude ... --agent <name>_agent "<name>"`, passing the agent name as the initial prompt to trigger the matching `/<name>` skill. Claude Code's CLI intercepts bare positional args that match (or fuzzy-match) one of its subcommands and treats them as a failed subcommand attempt, exiting before the skill ever loads. The terminal then dies and the watchdog may inject re-register prompts into the raw shell — a recovery cascade that costs a window reload and some noise in PowerShell history. Avoid naming any agent the same as — or one edit-distance away from — a Claude Code subcommand. **Reserved list (as of Claude Code 2.x):** `agent`, `agents`, `auth`, `auto-mode`, `doctor`, `install`, `mcp`, `plugin`, `plugins`, `setup-token`, `update`, `upgrade`. Note that `agent` itself is a near-match for the `agents` subcommand and therefore forbidden despite not being a subcommand proper. If your domain naturally suggests one of these (e.g., a voice-assistant skill you'd call `agent`), pick a synonym: `assistant`, `voice`, `chat`, `bot`, `wakeword`, etc. This is a seed-level convention — no CLI-side enforcement. Verify your roster's names against the reserved list at bootstrap and whenever adding a new agent.
+
+### Custom launchers
+
+Most agents launch with the default `claude --agent <name>_agent /<name>`. Some agents need a
+**special start sequence** first — e.g. mint a per-session capability token, write a session file,
+load secrets from `.env`, register with extra capabilities, set a fail-closed cleanup trap. For those,
+set `"launcher": "<path>"` in the agent's `agents.json` entry (path relative to the project root). The
+App (in-house **and** detached) and the IDE extension all honor it: they run **your script** instead
+of the default `claude` command, across all launch surfaces from the one field.
+
+**The launcher contract** — the script is spawned as the **foreground process of the agent's
+terminal**, with `TASK_ROUTER_AGENT`, `TASK_ROUTER_PROJECT`, and `TASK_ROUTER_MODEL` (the resolved
+model) injected into its environment, with the project root as `cwd`. Your script MUST:
+
+1. do its setup (mint tokens, write session files, `set -a; . .env; set +a`, register capabilities…);
+2. **end by running `claude` in the FOREGROUND** — `claude --agent <name>_agent "/<name>"` — and
+   **NOT** via `exec` if you want a cleanup trap to fire (running `claude` as a child keeps the trap
+   alive). Foreground-claude is required so the App's idle-wake, the dashboard send box, and the
+   attach window all reach the agent;
+3. clean up on exit with `trap … EXIT` (unregister, delete session files). The trap fires on normal
+   exit AND on **Stop** (the App's Stop = SIGHUP to the terminal), so the App's Stop and your
+   fail-closed cleanup line up automatically. (It does NOT fire on SIGKILL.)
+
+Requirements: `bash` must be available (Git Bash on Windows — already a Task Router prerequisite; the
+detached path uses the Cygwin bash that runs the tmux fleet). If the launcher file is missing, the
+launch is **refused** with `launcher_not_found` (it does not silently fall back to `claude`).
+
+**Worked example** (a privileged terminal that mints a cap-token, registers, and cleans up on exit):
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+[ -f "$ROOT/.env" ] && { set -a; . "$ROOT/.env"; set +a; }          # load secrets
+
+CAP_TOKEN="trxx_$(node -e 'process.stdout.write(require("crypto").randomBytes(16).toString("hex"))')"
+# … write the token's SHA-256 hash to a session file, register the agent with capabilities …
+
+cleanup() { rm -f "$ROOT/fleet/<agent>_session.json"; curl -s -X POST ".../api/unregister?project=$TASK_ROUTER_PROJECT" -d "{\"name\":\"<agent>\"}" >/dev/null 2>&1 || true; }
+trap cleanup EXIT
+
+export XYZ_CAP_TOKEN="$CAP_TOKEN"
+claude --agent <agent>_agent "/<agent>"     # FOREGROUND (not exec) so the trap fires on exit
+```
+
+Put launcher scripts under a project dir like `host/` (git-tracked) so the roster path is stable.
 
 ### Model Configuration
 

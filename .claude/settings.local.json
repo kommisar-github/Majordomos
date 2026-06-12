@@ -1,4 +1,15 @@
 {
+  "permissions": {
+    "allow": [
+      "mcp__task-router__check_inbox",
+      "PowerShell(echo $env:TASK_ROUTER_AGENT)",
+      "PowerShell(echo $env:TASK_ROUTER_PROJECT)"
+    ]
+  },
+  "enabledMcpjsonServers": [
+    "task-router",
+    "home-assistant"
+  ],
   "hooks": {
     "SessionStart": [
       {
@@ -77,9 +88,5 @@
         ]
       }
     ]
-  },
-  "enabledMcpjsonServers": [
-    "task-router",
-    "home-assistant"
-  ]
+  }
 }

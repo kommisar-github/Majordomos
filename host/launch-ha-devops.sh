@@ -6,8 +6,12 @@
 # ha_devops with the Task Router, then launches claude with HA_DEVOPS_CAP_TOKEN in
 # env.  On exit: unregisters ha_devops and deletes the session file (fail-closed gate).
 #
-# Usage:
-#   bash host/launch-ha-devops.sh
+# Usage (dual-mode — both reach the same foreground claude):
+#   (a) Manual:    bash host/launch-ha-devops.sh
+#   (b) App/ext:   spawned as the agent terminal's foreground process with
+#                  TASK_ROUTER_AGENT / TASK_ROUTER_PROJECT / TASK_ROUTER_MODEL
+#                  pre-injected and cwd = project root (launcher contract, PM.md
+#                  "Custom launchers"). ROOT is derived from $0, never from cwd.
 #
 # Prerequisites (see doc/runbooks/ha_deploy.md §1):
 #   - Task Router running on localhost:3100
@@ -113,4 +117,11 @@ export TASK_ROUTER_AGENT=ha_devops
 export TASK_ROUTER_PROJECT="${PROJECT}"
 export HA_DEVOPS_CAP_TOKEN="${CAP_TOKEN}"
 
-claude --agent ha_devops_agent /ha_devops "$@"
+# Honor the App/extension-injected resolved model (launcher contract: TASK_ROUTER_MODEL).
+# Manual launch leaves it unset → no --model flag (preserves the existing default).
+MODEL_ARGS=()
+if [ -n "${TASK_ROUTER_MODEL:-}" ]; then
+  MODEL_ARGS=(--model "${TASK_ROUTER_MODEL}")
+fi
+
+claude "${MODEL_ARGS[@]}" --dangerously-skip-permissions --agent ha_devops_agent "/ha_devops" "$@"

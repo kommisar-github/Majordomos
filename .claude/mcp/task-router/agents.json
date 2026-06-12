@@ -72,6 +72,7 @@
     ],
     "role": "specialist",
     "model": "claude-sonnet-4-6",
-    "no_fork": true
+    "no_fork": true,
+    "launcher": "host/launch-ha-devops.sh"
   }
 }
