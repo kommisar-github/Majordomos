@@ -1,5 +1,5 @@
 # /ha — Agent Guidelines
-**Last Updated:** 2026-06-11
+**Last Updated:** 2026-06-13
 
 ## Abstract
 
@@ -151,6 +151,57 @@ consistency via `/pm audit`.
   enabled* automation (via `platform: event`/MQTT trigger) without calling an automation service at all,
   bypassing `fleet_enable_deny` entirely. The WS `call_service` ban is the same family. **Any such addition
   requires fresh `/review`.** Full text: `ha_config_write.md` §5.5.
+
+- **Storage-based helper delete/undo — two-step WS resolve.** `input_number`,
+  `input_boolean`, `input_text`, `input_select`, `input_datetime`, `input_button`,
+  `counter`, `timer`, `schedule` (the **9** storage-backed helper types in
+  `WS_ALLOWED_TYPES`) carry `config_entry_id: null` — they cannot be deleted via a
+  config-entry `entry_id`. Delete (and `undo_config_write` of a `helper_create`)
+  requires a two-step WS resolve: (1) `<type>/list {}` → match the entry by the
+  **normalized** entity_id (`e.entity_id.toLowerCase()`, or construct `<type>.<e.id>`);
+  (2) `<type>/delete { <type>_id: <match.id> }` — the key is e.g. `input_number_id`,
+  **NOT** `entity_id` and **NOT** `entry_id` (HA hard-errors on the wrong key:
+  `extra keys not allowed @ data['entity_id'] … required key not provided @
+  data['input_number_id']`). Fail-closed on **no** match (`[HELPER-NOT-FOUND]`);
+  duplicate entity_ids cannot occur (HA enforces entity_id uniqueness), so the
+  `.find` takes the single exact match.
+
+- **`template_sensor_create` uses HA REST config-flow — WS `config_entries/flow/*`
+  is unsupported** (`config_entries/flow/init` → `{"code":"unknown_command"}`).
+  Three-step flow (verified live):
+
+  | Step | Request | Response |
+  |---|---|---|
+  | init | `POST /api/config/config_entries/flow {"handler":"template"}` | `{type:"menu", flow_id, step_id:"user"}` |
+  | select | `POST /api/config/config_entries/flow/<flow_id> {"next_step_id":"sensor"}` | `{type:"form", step_id:"sensor", last_step:true}` |
+  | submit | `POST /api/config/config_entries/flow/<flow_id> {name, state, unit_of_measurement?, device_class?, state_class?}` | `{type:"create_entry", entry_id}` |
+  | abort | `DELETE /api/config/config_entries/flow/<flow_id>` | best-effort on any error — no orphan flow |
+
+  NEW-1: `_slugify(name)` → `sensor.<slug>`, `GET /api/states/sensor.<slug>` before
+  init, hard-deny if pre-existing + Critical. Body-scan (`_scanTemplateSensor`):
+  extract entity refs from `state`/`name`/`availability`, classify via `_isCritical`;
+  template sensors are read-only (state templates cannot call services) so `hard_deny`
+  is **always false** — `critical_refs` are surfaced to the audit record / Telegram
+  confirm banner, not denied.
+
+- **Entity-id normalization invariant — all mutation paths, before `_isCritical`.**
+  Build `` `${helper_type}.${(object_id||'').trim()}`.toLowerCase() `` — trim the
+  **object_id segment before concatenation**, then lowercase the full result. An
+  outer-string trim (`` `${x}.${y}`.trim() ``) is insufficient: it leaves *interior*
+  whitespace (`" master_safety"`) that makes the Critical check silently miss. After
+  the check passes, bind every subsequent I/O (list → resolve → delete) to the
+  **same** normalized entity_id that cleared the check — no TOCTOU; the resolve step
+  runs **after** the Critical check, never before. Fail-closed on no match.
+
+- **Known executor debt (recorded to prevent re-discovery):**
+
+  | Item | Risk | Location |
+  |---|---|---|
+  | `template_sensor_delete` still uses WS `config_entries/remove` | untested against live HA; may break if HA drops that WS command | `_templateSensorDelete` |
+  | `_slugify` uses `[^a-z0-9]+→_` — diverges from HA's Python `slugify` | NEW-1 false negatives on non-ASCII sensor names (accented / CJK) | `_slugify` |
+  | `_scanTemplateSensor` misses the `states.<domain>.<object>` dotted attribute-access form (and does not expand `group.*`/`expand()` membership). The function-call forms `states('x.y')`, `is_state('x.y',…)`, `state_attr('x.y',…)` and the bracket form `states['x.y']` ARE caught. | Critical refs written in the dotted form won't appear in `critical_refs` (label-only — read-only ⇒ no safety action) | `_scanTemplateSensor` |
+  | `undo_config_write` of a `helper_create` has no drift check | storage helpers have no REST-readable `post_hash`; concurrent edits between create and undo go undetected | `_executeUndo` helper_create branch |
+  | `availability` template scanned for Critical refs but not forwarded to HA | the config-flow sensor form doesn't accept `availability`; the field is silently dropped | `_templateSensorCreate` |
 
 ## Decisions
 

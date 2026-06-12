@@ -1,5 +1,5 @@
 # /review — Agent Guidelines
-**Last Updated:** 2026-06-09
+**Last Updated:** 2026-06-13
 
 ## Abstract
 
@@ -64,11 +64,63 @@ When it ships, the code that implements it still owes a separate implementation 
 before-execute ordering, whitelist re-check?). Say so explicitly in the verdict so the
 gap isn't mistaken for coverage.
 
+### "Surface-but-don't-deny" is only safe for a provably read-only entity type
+A scan that *labels* Critical references without hard-denying them (e.g.
+`_scanTemplateSensor` returning `hard_deny:false` always, feeding only the
+Telegram confirm banner) is sound **only when the entity being created is
+structurally read-only** — it has no `action`/`service`/trigger field and
+therefore cannot cause-to-fire or mutate a Critical entity. Config-flow
+`template` *sensors* qualify (state/availability Jinja is pure-read). Before
+accepting any surface-don't-deny path, verify the **submitted schema** has no
+actions/trigger surface — not just the template strings. Any future template
+entity type that CAN carry actions/triggers (trigger-based template, YAML
+`action:` blocks, automation/script bodies) MUST re-introduce a real `hard_deny`
+and may NOT reuse a read-only scanner as-is. When you APPROVE a surface-only
+scan, state the read-only premise explicitly so a later action-carrying cousin
+can't silently inherit the weaker treatment.
+
+### Resolved-indirection must bind to the Critical-checked identity
+When an executor resolves an indirection before mutating — `entity_id → storage_id`
+via a `/list`, `name → slug`, audit-entry → target — the id actually mutated MUST
+be provably the same identity that passed the Critical/tier guard. Require:
+(a) the guard runs **before ALL I/O**, including any list/lookup/GET used to
+resolve — not merely before the final write (no TOCTOU window);
+(b) the match predicate is **exact** on the normalized identifier (a near/dup
+name like `x` vs `x_2` must never select the wrong entry), and the mutated id is
+read from the **same matched record** that satisfied the guard, never a sibling;
+(c) **fail-closed** on no-match or ambiguous/duplicate-match — refuse, audit, do
+not "best-effort" pick one. Probe it adversarially: put a Critical entry and a
+near-name decoy in the same lookup response and confirm the decoy resolves to its
+own id while the Critical one is denied before the lookup even fires.
+
+### An executor-side slugifier that gates a check must match the platform's slugify exactly
+If a locally-computed slug (or any reconstructed identifier) is used to GET-first
+and decide a NEW-1/overwrite hard-deny, it must match how the platform derives the
+real id — **including unicode transliteration** (HA's `slugify` maps `é→e`,
+`ß→ss`; a naive `[^a-z0-9]+ → _` yields `caf_`/`au_en`, a different entity_id).
+A divergent slug makes the check query a different entity than the platform
+creates — a silent NEW-1 detection blind spot — and mislabels the audit/return
+`entity_id` when the platform suffixes on collision (`_2`). Prefer recording the
+platform's **actual** created id (from the create response / a post-create state
+read) over the pre-computed slug; if you must compute locally, match the platform
+algorithm or restrict+validate inputs to the safe (ASCII) subset. Flag any
+gate-bearing identifier that is reconstructed rather than echoed back from the
+platform.
+
 ## Decisions
 
 - **2026-06-09 — Audit heuristics consolidated from the Q-HA-WHITELIST gate review**
   (two-round: APPROVE-WITH-CHANGES → C1 broken-confirm blocker → resolved). Source of the
   four Conventions above. Requested by PM after a `consider-consolidation` flag.
+
+- **2026-06-13 — Audit heuristics consolidated from the Q-HA-CONFIGWRITE W7 build review**
+  (`majordomus-daemon/src/ha-bridge.js` — `helper_delete(object_id)` list-resolve,
+  `_helperDelete`/`_executeUndo` normalization, `template_sensor_create` REST config-flow
+  + `_slugify`/`_scanTemplateSensor`). Source of the three Conventions added above:
+  (1) read-only-scoped surface-don't-deny, (2) resolved-indirection identity binding,
+  (3) executor slugify must match HA. Requested by PM after a `consider-consolidation`
+  flag across the multi-round W7 re-reviews; independently audited by `/arch` (APPROVE,
+  since `/review` is both requester and canonical reviewer of its own GUIDELINES).
 
 ## Open Questions
 
