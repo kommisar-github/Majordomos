@@ -1515,3 +1515,151 @@ describe('executeConfigWrite — blueprint_flag at executor level (MINOR-6 test 
     assert.equal(result.blueprint_flag, true, 'blueprint_flag must be true for script_upsert with use_blueprint');
   });
 });
+
+// ── W2: executeConfigWrite — template_sensor_create ──────────────────────────
+
+describe('executeConfigWrite — template_sensor_create', () => {
+  const wl = BASE_WHITELIST;
+  const okToken = async () => true;
+
+  const MENU_STEP    = { type: 'menu', flow_id: 'flow-abc', step_id: 'user', menu_options: ['sensor', 'binary_sensor'] };
+  const FORM_STEP    = { type: 'form', flow_id: 'flow-abc', step_id: 'sensor', last_step: true };
+  const CREATE_ENTRY = { type: 'create_entry', flow_id: 'flow-abc', entry_id: 'entry-xyz', title: 'Test Sensor', data: {} };
+
+  function mkOpts(overrides = {}) {
+    return {
+      whitelist: wl,
+      validateCapToken: okToken,
+      getState: async () => null,          // no pre-existing sensor by default
+      flowInit: async () => MENU_STEP,
+      flowProgress: async () => null,      // override per-test
+      flowAbort: async () => null,
+      ...overrides,
+    };
+  }
+
+  test('happy path: 3-step REST flow → applied, entry_id, overwrote:false, no critical_refs', async () => {
+    const progressCalls = [];
+    const result = await executeConfigWrite({
+      op: 'template_sensor_create',
+      payload: { name: 'Battery SoH', state: "{{ states('sensor.battery') | float }}", unit_of_measurement: '%' },
+      confirm_id: 'ts-c1',
+    }, 'tok', mkOpts({
+      flowProgress: async (id, data) => {
+        progressCalls.push({ id, data });
+        return progressCalls.length === 1 ? FORM_STEP : CREATE_ENTRY;
+      },
+    }));
+
+    assert.equal(result.op, 'template_sensor_create');
+    assert.equal(result.applied, true);
+    assert.equal(result.entry_id, 'entry-xyz');
+    assert.equal(result.overwrote, false);
+    assert.deepEqual(result.critical_refs, []);
+    assert.ok(result.audit_id);
+    // Step 2 must select sensor type
+    assert.deepEqual(progressCalls[0].data, { next_step_id: 'sensor' });
+    // Step 3 must forward name + state + optional fields
+    assert.equal(progressCalls[1].data.name, 'Battery SoH');
+    assert.equal(progressCalls[1].data.state, "{{ states('sensor.battery') | float }}");
+    assert.equal(progressCalls[1].data.unit_of_measurement, '%');
+  });
+
+  test('body-scan: Critical entity in state template → critical_refs surfaced, not denied', async () => {
+    const progressCalls = [];
+    const result = await executeConfigWrite({
+      op: 'template_sensor_create',
+      // switch.main_breaker is Critical in BASE_WHITELIST
+      payload: { name: 'Breaker Monitor', state: "{{ states('switch.main_breaker') }}" },
+      confirm_id: 'ts-c2',
+    }, 'tok', mkOpts({
+      flowProgress: async () => {
+        progressCalls.push(true);
+        return progressCalls.length === 1 ? FORM_STEP : CREATE_ENTRY;
+      },
+    }));
+
+    assert.equal(result.applied, true);
+    assert.ok(result.critical_refs.includes('switch.main_breaker'), 'critical_refs must surface switch.main_breaker');
+    // Flow was still allowed — template sensors are read-only
+    assert.equal(progressCalls.length, 2);
+  });
+
+  test('NEW-1: pre-existing non-Critical sensor → overwrote:true, flow still executes', async () => {
+    const priorState = { state: '42.5', entity_id: 'sensor.battery_so_h', attributes: {} };
+    const progressCalls = [];
+    const result = await executeConfigWrite({
+      op: 'template_sensor_create',
+      payload: { name: 'Battery So H', state: '{{ 42.5 }}' },
+      confirm_id: 'ts-c3',
+    }, 'tok', mkOpts({
+      getState: async () => priorState,
+      flowProgress: async () => {
+        progressCalls.push(true);
+        return progressCalls.length === 1 ? FORM_STEP : CREATE_ENTRY;
+      },
+    }));
+
+    assert.equal(result.applied, true);
+    assert.equal(result.overwrote, true);
+  });
+
+  test('NEW-1 Critical: pre-existing Critical sensor → hard-deny, flow never initiated', async () => {
+    const critWl = {
+      ...wl,
+      critical_entities: [...wl.critical_entities, { entity_id: 'sensor.critical_power', operator_finalize: true }],
+    };
+    let flowInitCalled = false;
+    await assert.rejects(
+      () => executeConfigWrite({
+        op: 'template_sensor_create',
+        payload: { name: 'Critical Power', state: '{{ 100 }}' },
+        confirm_id: 'ts-c4',
+      }, 'tok', {
+        whitelist: critWl,
+        validateCapToken: okToken,
+        getState: async () => ({ state: '100', entity_id: 'sensor.critical_power', attributes: {} }),
+        flowInit: async () => { flowInitCalled = true; return MENU_STEP; },
+        flowProgress: async () => CREATE_ENTRY,
+        flowAbort: async () => null,
+      }),
+      /HARD-DENY.*NEW-1/
+    );
+    assert.equal(flowInitCalled, false, 'flow must not be initiated when NEW-1 Critical denies');
+  });
+
+  test('flow error mid-progress → flowAbort called with correct flow_id', async () => {
+    let abortCalledWith = null;
+    await assert.rejects(
+      () => executeConfigWrite({
+        op: 'template_sensor_create',
+        payload: { name: 'Bad Sensor', state: '{{ 0 }}' },
+        confirm_id: 'ts-c5',
+      }, 'tok', mkOpts({
+        flowProgress: async (id) => { throw new Error('[TEST] HA rejected the step'); },
+        flowAbort: async (id) => { abortCalledWith = id; },
+      })),
+      /TEST.*HA rejected the step/
+    );
+    assert.equal(abortCalledWith, 'flow-abc', 'flowAbort must be called with the flow_id on mid-flow error');
+  });
+
+  test('HA returns form-with-errors on final step → TEMPLATE-SENSOR error thrown, abort called', async () => {
+    let abortCalled = false;
+    await assert.rejects(
+      () => executeConfigWrite({
+        op: 'template_sensor_create',
+        payload: { name: 'Error Sensor', state: '{% bad jinja %}' },
+        confirm_id: 'ts-c6',
+      }, 'tok', mkOpts({
+        flowProgress: async (_id, data) => {
+          if (data.next_step_id === 'sensor') return FORM_STEP;
+          return { type: 'form', step_id: 'sensor', errors: { state: 'invalid_template' } };
+        },
+        flowAbort: async () => { abortCalled = true; },
+      })),
+      /TEMPLATE-SENSOR.*create_entry/
+    );
+    assert.equal(abortCalled, true, 'flowAbort must be called on create_entry mismatch');
+  });
+});

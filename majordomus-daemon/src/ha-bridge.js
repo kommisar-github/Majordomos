@@ -968,23 +968,99 @@ async function _helperDelete(payload, confirm_id, wl, opts) {
   return { op: 'helper_delete', applied: true, audit_id, result };
 }
 
+// ── Template sensor helpers ────────────────────────────────────────────────────
+
+// HA slugification: "Battery SoH (%)" → "battery_so_h"
+function _slugify(name) {
+  return (name || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+/**
+ * Scan a template sensor payload for Critical entity references.
+ * Template sensors are READ-ONLY state templates — they cannot call services,
+ * so hard_deny is always false. critical_refs are surfaced for the Telegram banner.
+ */
+function _scanTemplateSensor(payload, wl) {
+  const text = [(payload.state || ''), (payload.name || ''), (payload.availability || '')].join(' ');
+  const pat = /\b([a-zA-Z_][a-zA-Z0-9_]*\.[a-zA-Z0-9_]+)\b/g;
+  const critical_refs = [];
+  let m;
+  while ((m = pat.exec(text)) !== null) {
+    const id = m[1].toLowerCase();
+    if (_isCritical(id, wl) && !critical_refs.includes(id)) critical_refs.push(id);
+  }
+  return { critical_refs, hard_deny: false };
+}
+
 async function _templateSensorCreate(payload, confirm_id, wl, opts) {
-  _scopedWsSend('config_entries/flow/init', {}); // structural scope-guard (checked for all flow types used)
-  const wsCmd = opts.wsCmd || _executeWsCommandDefault;
-  // Multi-step config-flow: init → submit → create entry
+  // Body-scan BEFORE any I/O — surfaces Critical entity refs in the template
+  const scan = _scanTemplateSensor(payload, wl);
+
+  // NEW-1: GET-first — detect pre-existing sensor by slugified name
+  const slug = _slugify(payload.name || '');
+  const entityId = slug ? `sensor.${slug}` : null;
+  const getState = opts.getState || _getHaStateRest;
+  let prior = null;
+  if (entityId) {
+    prior = await getState(entityId);
+    if (prior !== null && _isCritical(entityId, wl)) {
+      throw new Error(
+        `[HARD-DENY] template_sensor_create: pre-existing Critical sensor "${entityId}" — overwrite refused (§3.4 NEW-1).`
+      );
+    }
+  }
+
+  // REST config-flow: 3 steps — init (menu) → select sensor (form) → submit form (create_entry)
+  const flowInit     = opts.flowInit     || ((handler) => _haRestRequest('POST',   '/api/config/config_entries/flow',        { handler }));
+  const flowProgress = opts.flowProgress || ((id, data) => _haRestRequest('POST',  `/api/config/config_entries/flow/${id}`,  data));
+  const flowAbort    = opts.flowAbort    || ((id)       => _haRestRequest('DELETE', `/api/config/config_entries/flow/${id}`));
+
   let flowId = null;
   try {
-    const initResult = await wsCmd('config_entries/flow/init', { handler: 'template' });
+    // Step 1: init — handler:"template" → type:"menu", step_id:"user"
+    const initResult = await flowInit('template');
     flowId = initResult && initResult.flow_id;
-    if (!flowId) throw new Error('[TEMPLATE-SENSOR] config-flow init did not return a flow_id');
-    const createResult = await wsCmd('config_entries/flow/progress', { flow_id: flowId, user_input: payload });
+    if (!flowId) throw new Error('[TEMPLATE-SENSOR] flow init did not return flow_id');
+    if (initResult.type !== 'menu') throw new Error(`[TEMPLATE-SENSOR] expected menu step after init, got type="${initResult.type}"`);
+
+    // Step 2: select sensor type → type:"form", step_id:"sensor", last_step:true
+    const menuResult = await flowProgress(flowId, { next_step_id: 'sensor' });
+    if (menuResult.type !== 'form' || menuResult.step_id !== 'sensor') {
+      throw new Error(`[TEMPLATE-SENSOR] expected sensor form step, got type="${menuResult.type}" step_id="${menuResult.step_id}"`);
+    }
+
+    // Step 3: submit sensor config → type:"create_entry"
+    const { name, state, unit_of_measurement, device_class, state_class } = payload;
+    const formData = { name, state };
+    if (unit_of_measurement !== undefined) formData.unit_of_measurement = unit_of_measurement;
+    if (device_class  !== undefined) formData.device_class  = device_class;
+    if (state_class   !== undefined) formData.state_class   = state_class;
+
+    const createResult = await flowProgress(flowId, formData);
+    if (createResult.type !== 'create_entry') {
+      throw new Error(
+        `[TEMPLATE-SENSOR] expected create_entry, got type="${createResult.type}"` +
+        (createResult.errors ? ` errors=${JSON.stringify(createResult.errors)}` : '')
+      );
+    }
+
     const audit_id = crypto.randomUUID();
-    _appendAudit({ audit_id, confirm_id, op: 'template_sensor_create', payload, result: createResult, outcome: 'success' });
-    return { op: 'template_sensor_create', applied: true, audit_id, result: createResult };
+    _appendAudit({
+      audit_id, confirm_id, op: 'template_sensor_create',
+      payload, prior, overwrote: prior !== null,
+      entry_id: createResult.entry_id, entity_id: entityId,
+      critical_refs: scan.critical_refs,
+      outcome: 'success',
+    });
+    return {
+      op: 'template_sensor_create', applied: true, audit_id,
+      entry_id: createResult.entry_id, entity_id: entityId,
+      overwrote: prior !== null, critical_refs: scan.critical_refs,
+    };
   } catch (err) {
-    // Partial-write atomicity: abort dangling flow to avoid orphan config entries (§5.3)
+    // Abort dangling flow to avoid orphan config entries (§5.3)
     if (flowId) {
-      try { await wsCmd('config_entries/flow/cancel', { flow_id: flowId }); } catch { /* best-effort */ }
+      try { await flowAbort(flowId); } catch { /* best-effort */ }
     }
     _appendAudit({ op: 'template_sensor_create', confirm_id, payload, outcome: 'failure', error: err.message });
     throw err;
