@@ -901,10 +901,32 @@ async function _helperUpdate(payload, confirm_id, wl, opts) {
 }
 
 async function _helperDelete(payload, confirm_id, wl, opts) {
-  const { helper_type, entry_id } = payload || {};
-  if (!helper_type || !entry_id) throw new Error('helper_delete: payload.helper_type and entry_id required');
+  const { helper_type, entry_id, object_id } = payload || {};
+  if (!helper_type) throw new Error('helper_delete: payload.helper_type required');
+  if (!entry_id && !object_id) throw new Error('helper_delete: payload.entry_id or payload.object_id required');
+
   const type = `${helper_type}/delete`;
-  const cmdPayload = { entry_id };
+  let cmdPayload;
+  if (object_id) {
+    // Storage-based helpers have no config-entry UUID — HA delete command uses entity_id.
+    // Normalize (trim+lowercase) before _isCritical — mirrors classifyEntity §4(f) to close
+    // the case/whitespace bypass (object_id="Master_Safety" / " master_safety" must hit the guard).
+    // Trim object_id BEFORE concatenation so interior whitespace (e.g. " master") is removed.
+    const entityId = `${helper_type}.${(object_id || '').trim()}`.toLowerCase();
+    if (_isCritical(entityId, wl)) {
+      throw new Error(
+        `[HARD-DENY] helper_delete: "${entityId}" is a Critical entity — cannot delete a safety interlock (§3.4).`
+      );
+    }
+    cmdPayload = { entity_id: entityId };
+  } else {
+    // Config-entry-based helper (config_entry_id is not null): use entry_id
+    cmdPayload = { entry_id };
+  }
+
+  // §6 limitation: helper_delete is irreversible via undo_config_write. Storage-based helpers
+  // carry no `prior` config retrievable by REST — there is no undo branch for this op.
+  // The audit record below is detective-only; manual re-creation is the recovery path.
   _scopedWsSend(type, cmdPayload); // structural scope-guard
   const wsCmd = opts.wsCmd || _executeWsCommandDefault;
   let result;
@@ -1017,6 +1039,52 @@ async function _executeUndo({ payload, confirm_id }, capToken, opts) {
       undoes_audit_id: audit_id, result: undoResult, outcome: 'success',
     });
     return { op: 'undo_config_write', applied: true, audit_id: undoAuditId, undoes: audit_id, ...undoResult };
+  }
+
+  // helper_create undo: delete the created storage-based helper by entity_id
+  if (originalOp === 'helper_create') {
+    const helper_type = entry.payload && entry.payload.helper_type;
+    // HA's storage create response includes `id` = the object_id of the created helper
+    const created_object_id = entry.result && (
+      entry.result.id ||
+      (entry.result.entity_id && entry.result.entity_id.split('.')[1])
+    );
+    if (!helper_type || !created_object_id) {
+      throw new Error(
+        `[UNDO-UNSUPPORTED] helper_create undo: audit entry missing helper_type or created entity id ` +
+        `(result.id="${entry.result && entry.result.id}") — cannot determine which helper to delete.`
+      );
+    }
+    // Normalize (trim+lowercase) before _isCritical — same §4(f) invariant as classifyEntity
+    // and _helperDelete: closes case/whitespace bypass (result.id="Master_Safety"/" master_safety").
+    // Trim created_object_id BEFORE concatenation so interior whitespace is removed.
+    const entityId = `${helper_type}.${(created_object_id || '').trim()}`.toLowerCase();
+    if (_isCritical(entityId, wl)) {
+      throw new Error(
+        `[HARD-DENY] undo helper_create: "${entityId}" is a Critical entity — delete is denied (§3.4).`
+      );
+    }
+    // §6 limitation: helper_create undo has no drift check. Storage-based helpers have no
+    // REST-readable `post_hash` equivalent — we cannot verify HA state matches what we wrote.
+    // Recorded in the audit below; operator should verify entity state in HA before undoing
+    // if concurrent edits are possible.
+    const wsCmd = opts.wsCmd || _executeWsCommandDefault;
+    const deleteType = `${helper_type}/delete`;
+    const cmdPayload = { entity_id: entityId };
+    _scopedWsSend(deleteType, cmdPayload);
+    let deleteResult;
+    try {
+      deleteResult = await wsCmd(deleteType, cmdPayload);
+    } catch (err) {
+      _appendAudit({ op: 'undo_config_write', confirm_id, undoes_audit_id: audit_id, outcome: 'failure', error: err.message });
+      throw err;
+    }
+    const undoAuditId = crypto.randomUUID();
+    _appendAudit({
+      audit_id: undoAuditId, confirm_id, op: 'undo_config_write',
+      undoes_audit_id: audit_id, result: { action: 'deleted', helper_type, object_id: created_object_id }, outcome: 'success',
+    });
+    return { op: 'undo_config_write', applied: true, audit_id: undoAuditId, undoes: audit_id, action: 'deleted', helper_type, object_id: created_object_id };
   }
 
   throw new Error(`[UNDO-UNSUPPORTED] Undo for op="${originalOp}" without object_id not implemented`);

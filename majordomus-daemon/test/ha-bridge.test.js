@@ -28,9 +28,12 @@ const BASE_WHITELIST = {
   glob_support: true,
   ttl: { inbound_seconds: 120, outbound_seconds: 300 },
   critical_entities: [
-    { entity_id: 'switch.main_breaker',   operator_finalize: true },
-    { entity_id: 'switch.visonic_p1_*',   operator_finalize: true },
-    { entity_id: 'switch.promoted_safe',  operator_finalize: true, promote_critical: true },
+    { entity_id: 'switch.main_breaker',        operator_finalize: true },
+    { entity_id: 'switch.visonic_p1_*',        operator_finalize: true },
+    { entity_id: 'switch.promoted_safe',       operator_finalize: true, promote_critical: true },
+    // Helper-domain Critical for testing _helperDelete / undo-helper_create guard paths.
+    // input_boolean/delete IS in WS_ALLOWED_TYPES, so _isCritical is the sole guard here.
+    { entity_id: 'input_boolean.master_safety', operator_finalize: true },
   ],
   domain_defaults: {
     light:               'A',
@@ -1077,6 +1080,75 @@ describe('executeConfigWrite — helper ops', () => {
       /helper_type required/
     );
   });
+
+  test('helper_delete by object_id (storage-based) sends entity_id to wsCmd', async () => {
+    let wsCalled = null;
+    const opts = {
+      whitelist: wl, validateCapToken: okToken,
+      wsCmd: async (type, payload) => { wsCalled = { type, payload }; return {}; },
+    };
+    await executeConfigWrite(
+      { op: 'helper_delete', payload: { helper_type: 'input_number', object_id: 'battery_start_energy_2' }, confirm_id: 'c34' },
+      'tok', opts
+    );
+    assert.equal(wsCalled.type, 'input_number/delete');
+    assert.equal(wsCalled.payload.entity_id, 'input_number.battery_start_energy_2');
+    assert.equal(wsCalled.payload.entry_id, undefined);
+  });
+
+  test('helper_delete by object_id rejects Critical entity (§3.4 HARD-DENY) — exact match', async () => {
+    // input_boolean/delete IS in WS_ALLOWED_TYPES → _isCritical is the sole guard (not _scopedWsSend)
+    const opts = {
+      whitelist: wl, validateCapToken: okToken,
+      wsCmd: async () => { throw new Error('should not be called'); },
+    };
+    await assert.rejects(
+      () => executeConfigWrite(
+        { op: 'helper_delete', payload: { helper_type: 'input_boolean', object_id: 'master_safety' }, confirm_id: 'c35a' },
+        'tok', opts
+      ),
+      /HARD-DENY.*Critical entity/
+    );
+  });
+
+  test('helper_delete Critical guard blocks case-variant object_id (Master_Safety)', async () => {
+    const opts = {
+      whitelist: wl, validateCapToken: okToken,
+      wsCmd: async () => { throw new Error('should not be called'); },
+    };
+    await assert.rejects(
+      () => executeConfigWrite(
+        { op: 'helper_delete', payload: { helper_type: 'input_boolean', object_id: 'Master_Safety' }, confirm_id: 'c35b' },
+        'tok', opts
+      ),
+      /HARD-DENY.*Critical entity/
+    );
+  });
+
+  test('helper_delete Critical guard blocks whitespace-padded object_id (" master_safety")', async () => {
+    const opts = {
+      whitelist: wl, validateCapToken: okToken,
+      wsCmd: async () => { throw new Error('should not be called'); },
+    };
+    await assert.rejects(
+      () => executeConfigWrite(
+        { op: 'helper_delete', payload: { helper_type: 'input_boolean', object_id: ' master_safety' }, confirm_id: 'c35c' },
+        'tok', opts
+      ),
+      /HARD-DENY.*Critical entity/
+    );
+  });
+
+  test('helper_delete rejects when both entry_id and object_id absent', async () => {
+    const opts = { whitelist: wl, validateCapToken: okToken, wsCmd: async () => ({}) };
+    await assert.rejects(
+      () => executeConfigWrite(
+        { op: 'helper_delete', payload: { helper_type: 'input_number' }, confirm_id: 'c36' },
+        'tok', opts
+      ),
+      /entry_id or payload\.object_id required/
+    );
+  });
 });
 
 // ── W2: executeConfigWrite — undo_config_write ────────────────────────────────
@@ -1099,6 +1171,92 @@ describe('executeConfigWrite — undo_config_write', () => {
       () => executeConfigWrite({ op: 'undo_config_write', payload: { audit_id: 'no-such-id' }, confirm_id: 'u2' }, 'tok', opts),
       /UNDO-NOT-FOUND/
     );
+  });
+
+  test('undo helper_create hard-denies when result.id resolves to a Critical helper entity', async () => {
+    // Create a helper whose result.id is a Critical entity in a helper domain.
+    // input_boolean/delete IS in WS_ALLOWED_TYPES → _isCritical is the sole guard.
+    const createOpts = {
+      whitelist: wl, validateCapToken: okToken,
+      wsCmd: async () => ({ id: 'master_safety', name: 'Master Safety' }),
+    };
+    const createResult = await executeConfigWrite(
+      { op: 'helper_create', payload: { helper_type: 'input_boolean', name: 'Master Safety' }, confirm_id: 'u-crit-create' },
+      'tok', createOpts
+    );
+    const undoOpts = {
+      whitelist: wl, validateCapToken: okToken,
+      wsCmd: async () => { throw new Error('should not be called'); },
+    };
+    await assert.rejects(
+      () => executeConfigWrite(
+        { op: 'undo_config_write', payload: { audit_id: createResult.audit_id }, confirm_id: 'u-crit-undo' },
+        'tok', undoOpts
+      ),
+      /HARD-DENY.*Critical entity/
+    );
+  });
+
+  test('undo helper_create Critical guard blocks case-variant result.id (Master_Safety)', async () => {
+    const createOpts = {
+      whitelist: wl, validateCapToken: okToken,
+      wsCmd: async () => ({ id: 'Master_Safety' }),
+    };
+    const createResult = await executeConfigWrite(
+      { op: 'helper_create', payload: { helper_type: 'input_boolean', name: 'Master Safety' }, confirm_id: 'u-crit-create-case' },
+      'tok', createOpts
+    );
+    const undoOpts = {
+      whitelist: wl, validateCapToken: okToken,
+      wsCmd: async () => { throw new Error('should not be called'); },
+    };
+    await assert.rejects(
+      () => executeConfigWrite(
+        { op: 'undo_config_write', payload: { audit_id: createResult.audit_id }, confirm_id: 'u-crit-undo-case' },
+        'tok', undoOpts
+      ),
+      /HARD-DENY.*Critical entity/
+    );
+  });
+
+  test('undo helper_create deletes the created storage-based helper by entity_id', async () => {
+    const wsCalls = [];
+    // First create the helper — wsCmd returns result.id so undo can find the entity
+    const createOpts = {
+      whitelist: wl, validateCapToken: okToken,
+      wsCmd: async (type, payload) => {
+        wsCalls.push({ type, payload });
+        return { id: 'test_helper_undo', name: 'Test Helper Undo' };
+      },
+    };
+    const createResult = await executeConfigWrite(
+      { op: 'helper_create', payload: { helper_type: 'input_number', name: 'Test Helper Undo', min: 0, max: 100 }, confirm_id: 'u-create-1' },
+      'tok', createOpts
+    );
+    assert.equal(createResult.op, 'helper_create');
+    const audit_id = createResult.audit_id;
+
+    // Now undo — should call input_number/delete with entity_id
+    const undoOpts = {
+      whitelist: wl, validateCapToken: okToken,
+      wsCmd: async (type, payload) => {
+        wsCalls.push({ type, payload });
+        return {};
+      },
+    };
+    const undoResult = await executeConfigWrite(
+      { op: 'undo_config_write', payload: { audit_id }, confirm_id: 'u-undo-1' },
+      'tok', undoOpts
+    );
+    assert.equal(undoResult.op, 'undo_config_write');
+    assert.equal(undoResult.action, 'deleted');
+    assert.equal(undoResult.helper_type, 'input_number');
+    assert.equal(undoResult.object_id, 'test_helper_undo');
+
+    const deleteCall = wsCalls.find(c => c.type === 'input_number/delete');
+    assert.ok(deleteCall, 'expected input_number/delete wsCmd call');
+    assert.equal(deleteCall.payload.entity_id, 'input_number.test_helper_undo');
+    assert.equal(deleteCall.payload.entry_id, undefined);
   });
 });
 
