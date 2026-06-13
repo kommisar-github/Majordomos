@@ -2,7 +2,7 @@
 
 **Purpose:** Maps every design / implementation / reference document in the majordomos project to the specialist agent(s) responsible for it. Agents read their assigned docs when dispatched; PM uses this matrix to pick the right delegate.
 
-**Last Updated:** 2026-06-09
+**Last Updated:** 2026-06-13
 **Maintained By:** `/pm`
 
 ## Abstract
@@ -57,7 +57,8 @@
 | `runbooks/ha_v1_exposure.md` | reference | `/ops` | `/ha`, `/pm` | Operator runbook: prune Tier B/C entities from HA MCP Server exposure (v1 zero-code safety gate). |
 | `design/host_ops.md` | reference | `/ops` | `/pm` | macOS always-on host runbook: provisioning, headless claude auth, launchd, env wiring for HA/telegram secrets. |
 | `reference/ha_entity_catalog.md` | reference | `/ha` | `/pm` | Full HA entity inventory (4,997 entities): by area, by function, safety-tier annotation, Critical-list finalization input, solar inverter battery finding, v1 pruning checklist. |
-| `reference/inverter_battery_health.md` | reference | `/ha` | `/pm` | Deye inverter battery health baseline (2026-06-09): health snapshot, SoH calculator diagnosis (3 missing helpers → silent no-op), operator fix steps, monitoring candidates. |
+| `reference/inverter_battery_health.md` | reference | `/ha` | `/pm` | Deye inverter battery health baseline (2026-06-09): health snapshot, SoH calculator diagnosis (3 missing helpers → silent no-op), operator fix steps, monitoring candidates. ⚠️ chemistry refs say LiFePO4 — STALE, the bank is AGM (see battery_monbat_12mvr200.md). |
+| `reference/battery_monbat_12mvr200.md` | reference | `/ha` | `/pm` | Monbat 12MVR200 AGM battery spec (2× series = 24V ~4.8kWh): full 20°C+25°C discharge tables, temp-correction table, derived Peukert k≈1.12, charge regime, SoH usage (rated_kwh=4.8). |
 | `design/ha_config_write.md` | design | `/ha` | `/pm`, `/ha_devops` | Gated HA config-write (draft-disabled, human-enables); two-layer `/ha`+`ha_devops`; cap-token hard gate + body-scan + drift-safe undo. |
 | `ha_devops_GUIDELINES.md` | reference | `/ha_devops` | `/pm` | Durable guidelines for the runtime deployer; written via consolidation only. |
 | `runbooks/ha_deploy.md` | reference | `/ha_devops` | `/ha`, `/ops`, `/pm` | Operator runbook: launch `ha_devops`, deploy flow, enable-by-hand step, undo, W5 bring-up + W7 e2e. |
