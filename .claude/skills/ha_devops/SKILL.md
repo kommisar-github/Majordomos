@@ -74,7 +74,21 @@ default does NOT apply to a dispatched, `confirm_id`-bearing task).
 2. Parse the payload — it carries `{ op, payload, confirm_id }` (the supported ops:
    `helper_create|helper_update|helper_delete`, `template_sensor_create|template_sensor_delete`,
    `automation_upsert|automation_delete`, `script_upsert|script_delete`, `undo_config_write`).
-3. **Call the gated executor over loopback**, presenting the cap-token from your env:
+3. **Executor-liveness precheck (HA-REMEDIATION-3 — hard gate, not a suggestion).**
+   Before calling the executor, confirm the loopback executor on port 3101 is
+   reachable. It exposes NO `GET /health` route (only `POST /api/ha/{execute,config-write}`),
+   so probe reachability, not a 200:
+
+   ```
+   code=$(curl -s -o /dev/null -m 2 -w '%{http_code}' -X POST http://127.0.0.1:3101/api/ha/config-write)
+   ```
+   `code == 000` (connection refused/timeout) ⇒ executor DOWN. On DOWN, call
+   `complete_task` with `"[BLOCKED] Executor is down at 127.0.0.1:3101 — operator must
+   start it (node majordomus-daemon/bin/app.js) and re-dispatch."` and STOP. Do **NOT**
+   fall back to direct HA REST (that bypasses cap-token, body-scan, cause-to-fire deny,
+   force-disable, verify, and audit — the whole gate). `code != 000` (e.g. 400/401) ⇒
+   executor UP ⇒ proceed to the executor call below. (Runbook §5.)
+4. **Call the gated executor over loopback**, presenting the cap-token from your env:
 
    ```
    POST http://127.0.0.1:3101/api/ha/config-write
@@ -91,13 +105,13 @@ default does NOT apply to a dispatched, `confirm_id`-bearing task).
    `fleet_enable_deny` cause-to-fire check, NEW-1 overwrite-protection, force-injects
    `initial_state:false`, verifies, and audits. Your job is to *carry* the request,
    not to second-guess or bypass the gate.
-4. **Read the executor response.** On success it returns `{ op, applied, audit_id,
+5. **Read the executor response.** On success it returns `{ op, applied, audit_id,
    created_disabled, overwrote }` (helper/delete/undo ops return a smaller shape —
    relay whatever is present). On refusal: `401 [CAP-TOKEN]`, `403 [FLEET_ENABLE_DENY]`,
    `403 [HARD-DENY]`, `403 [BODY-SCAN-DENY]` (body-scan hard-deny — distinct from
    `[HARD-DENY]`), `400 [UNSUPPORTED-OP]`, or a `502` HA-rejection error — report it
    verbatim, do not retry a hard-deny.
-5. `complete_task(task_id, agent="ha_devops", result, state_brief)` — **never empty**.
+6. `complete_task(task_id, agent="ha_devops", result, state_brief)` — **never empty**.
    For a created object the result MUST include the `audit_id`, `created_disabled`
    status, and the **"created DISABLED — the operator must enable it by hand in the
    HA UI"** reminder so PM relays it. Surface the `audit_id` so a later

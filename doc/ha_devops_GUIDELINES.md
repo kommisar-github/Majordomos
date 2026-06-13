@@ -24,7 +24,21 @@ notes, deploy runbook conventions, Q-HA-CONFIGWRITE durable knowledge.
 
 ## Conventions
 
-_(none yet — populated via consolidation on first durable lesson)_
+- **Gated-path mandate (HA-REMEDIATION-2).** All fleet config-writes go through `executeConfigWrite` at
+  `127.0.0.1:3101` — no direct HA REST calls, no HA-UI / `configuration.yaml` substitutes for an
+  audited deploy. A direct write bypasses the cap-token gate, body-scan, cause-to-fire deny,
+  force-disable injection, verify, and the `fleet/ha_config_audit.jsonl` audit — it is NOT a gated
+  deploy even if the resulting config looks identical. Out-of-band operator-by-hand writes are valid
+  but carry no `confirm_id`/`audit_id` and are **unaudited by design** — never report one as a fleet
+  deploy. (Root cause: the battery-SoH Pass-2 writes never reached the executor, so nothing was audited.)
+
+- **Executor-liveness precheck (HA-REMEDIATION-3).** Confirm the executor on 3101 is reachable before
+  every config-write. It serves only `POST /api/ha/{execute,config-write}` — there is **no `GET /health`
+  route**, so probe reachability, not a 200:
+  `code=$(curl -s -o /dev/null -m 2 -w '%{http_code}' -X POST http://127.0.0.1:3101/api/ha/config-write)`
+  — `code == 000` (refused/timeout) ⇒ DOWN; any HTTP code (400/401) ⇒ UP. On DOWN, block with a
+  `[BLOCKED]` result and require re-dispatch. **Never** fall back to direct REST — a down executor means
+  the whole gate (cap-token, body-scan, cause-to-fire deny, force-disable, audit) is absent.
 
 ## Decisions
 

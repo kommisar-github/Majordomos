@@ -25,6 +25,7 @@ Before launching `ha_devops`, confirm all of the following:
 |---|---|
 | `majordomus-daemon` deps installed | `ls majordomus-daemon/node_modules/ws` — if absent: `( cd majordomus-daemon && npm ci )` |
 | Task Router running on port 3100 | `curl -s http://127.0.0.1:3100/health` → 200 |
+| Executor running on port 3101 | Reachability probe — see §5 (port 3101 has no `/health` route; empty-body POST returning any code ≠ `000` = UP); started in-process by `node majordomus-daemon/bin/app.js` |
 | `HA_BASE_URL` in `.env` | e.g. `HA_BASE_URL=http://homeassistant.local:8123` |
 | `HA_TOKEN` in `.env` | HA long-lived access token (Settings → Profile → Long-Lived Access Tokens) |
 | `claude` CLI in PATH, authenticated | `claude --version` runs without a browser login (G1 headless) |
@@ -115,7 +116,97 @@ Tier-B **service calls** (`executeApprovedAction`) are a separate path and are n
 
 ---
 
-## 4. Config-write end-to-end flow
+## 4. Gated-path mandate — ALL config-writes must use the executor (HA-REMEDIATION-2)
+
+> **Hard rule — no exceptions for fleet-originated, audited deploys.**
+
+Every HA config-write operation — `helper_create|helper_update|helper_delete`,
+`template_sensor_create|template_sensor_delete`, `automation_upsert|automation_delete`,
+`script_upsert|script_delete`, `undo_config_write` — **MUST** go through
+`executeConfigWrite` via the live loopback executor at `http://127.0.0.1:3101`.
+
+**Forbidden substitutes (both produce an unaudited, untracked write):**
+
+- **Direct HA REST calls** — e.g. any agent issuing `POST /api/config/automation/config/<id>`
+  directly against HA. Bypasses the cap-token gate, body-scan, cause-to-fire deny,
+  force-disable injection, verify step, and audit log. The same config body posted
+  directly to HA is **not a gated deploy**, even if the result looks identical.
+- **Manual HA-UI or `configuration.yaml` edits** — operator-by-hand actions with no
+  `confirm_id`, no `audit_id`, no `fleet/ha_config_audit.jsonl` entry, and no
+  drift-safe `undo_config_write` path through the fleet.
+
+**Exception — intentional out-of-band writes (operator-by-hand):** An operator who
+deliberately creates or edits a helper/automation/sensor via the HA UI or YAML
+directly (e.g. UI-created `input_number`, YAML-only template entities) is performing
+a valid **out-of-band write, unaudited by design**. This MUST NOT be reported as, or
+confused with, a gated fleet deploy. It carries no `audit_id`, no `confirm_id`, and
+`undo_config_write` cannot reverse it.
+
+**Root cause of HA-REMEDIATION-2:** during the battery SoH Pass-2 session, live
+config-writes were applied via direct HA API / HA UI rather than through
+`executeConfigWrite`. The executor was unreachable or was never called. Consequently,
+`fleet/ha_config_audit.jsonl` had no entry for those writes — the code was correct
+(`_appendAudit()` fires unconditionally inside `executeConfigWrite`), but the call
+never reached the executor. This mandate closes that gap: the executor is the **only**
+permitted path for fleet-originated config mutations.
+
+---
+
+## 5. Executor-liveness precheck — mandatory before any config-write (HA-REMEDIATION-3)
+
+> **Hard gate — not a suggestion.**
+
+Before issuing **any** config-write — including when `ha_devops` picks up a dispatched
+task — the executor at `http://127.0.0.1:3101` MUST be confirmed live:
+
+```bash
+code=$(curl -s -o /dev/null -m 2 -w '%{http_code}' -X POST http://127.0.0.1:3101/api/ha/config-write)
+[ "$code" != "000" ] && echo "executor UP (HTTP $code)" || echo "executor DOWN — do not deploy"
+```
+
+> **Why POST, not GET /health?** Port 3101 has no `/health` route — `GET /health` returns
+> 404 on a perfectly healthy executor, falsely reporting DOWN. The empty-body POST hits
+> `readBody` and returns **400 ("Invalid JSON body")** before any cap-token check or HA I/O,
+> proving liveness with zero side effects.
+
+| Result | Meaning | Action |
+|---|---|---|
+| **`code` ≠ `000`** (e.g. `400`, `401`) | Executor reachable — UP | Proceed with the deploy. |
+| **`code` == `000`** (connection refused / timeout) | Executor unreachable — DOWN | **STOP. Do NOT deploy.** Do not fall back to direct HA REST. |
+
+**If executor is down:** complete any in-progress task with result:
+`"[BLOCKED] Executor is down at 127.0.0.1:3101 — cannot deploy. Operator must
+start the executor (node majordomus-daemon/bin/app.js) and re-dispatch this task."`
+No HA mutation occurs. PM relays this to the operator.
+
+**`ha_devops` precheck behavior (mandatory):** `ha_devops` MUST perform this liveness
+check before calling `POST http://127.0.0.1:3101/api/ha/config-write`. If the health
+check fails, call `complete_task` with the blocked result above. Do not attempt the
+config-write call.
+
+**Why not fall back to direct REST?** A down executor means the entire gate is
+absent — cap-token validation, body-scan, cause-to-fire deny, force-disable injection,
+verify, and audit are all bypassed. Falling back to direct REST silently defeats every
+structural control. The correct response is always: restore the executor, then deploy.
+
+**Full pre-deploy health check:**
+
+```bash
+# Task Router (has /health endpoint):
+curl -sf http://127.0.0.1:3100/health && echo "Task Router UP" || echo "Task Router DOWN"
+
+# Executor (no /health route — use reachability probe):
+code=$(curl -s -o /dev/null -m 2 -w '%{http_code}' -X POST http://127.0.0.1:3101/api/ha/config-write)
+[ "$code" != "000" ] && echo "Executor UP (HTTP $code)" || echo "Executor DOWN"
+```
+
+Both must return UP before a config-write deploy can proceed. The `/app` supervisor
+(`majordomus-daemon/bin/app.js`) starts the executor in-process on launch; if the
+executor is down, the daemon itself may be down.
+
+---
+
+## 6. Config-write end-to-end flow
 
 ```
 Operator → Telegram
@@ -134,7 +225,7 @@ Operator → Telegram
 
 ---
 
-## 5. W5 bring-up checklist
+## 7. W5 bring-up checklist
 
 Run after W5 creates the `ha_devops` SKILL.md, rules, and `agents.json` row:
 
@@ -152,11 +243,11 @@ Run after W5 creates the `ha_devops` SKILL.md, rules, and `agents.json` row:
 
 ---
 
-## 6. W7 e2e acceptance sequence
+## 8. W7 e2e acceptance sequence
 
-Run after W5 bring-up, W6 PM policy, HA WS reachability confirmed, and scene-exposure hygiene step complete (§7):
+Run after W5 bring-up, W6 PM policy, HA WS reachability confirmed, and scene-exposure hygiene step complete (§9):
 
-### 6.1 Create `sensor.battery_state_of_health` (Template helper)
+### 8.1 Create `sensor.battery_state_of_health` (Template helper)
 
 - Operator via Telegram: request creation of the SoH template sensor
   (see `doc/reference/inverter_battery_health.md` for the template body)
@@ -165,13 +256,13 @@ Run after W5 bring-up, W6 PM policy, HA WS reachability confirmed, and scene-exp
 - PM dispatches to `ha_devops` → `executeConfigWrite({op:"template_sensor_create", ...})`
 - Verify: `GET /api/states/sensor.battery_state_of_health` returns a non-null state
 
-### 6.2 Undo the create
+### 8.2 Undo the create
 
 - Operator via Telegram: `undo config write <audit_id>` (audit_id from step 6.1 result)
 - PM → `ha_devops` → `executeConfigWrite({op:"undo_config_write", payload:{audit_id}})`
 - Verify: `GET /api/states/sensor.battery_state_of_health` returns null
 
-### 6.3 Critical-referencing automation — deploy DISABLED
+### 8.3 Critical-referencing automation — deploy DISABLED
 
 - Request creation of an automation referencing a Critical entity (e.g. `switch.main_breaker`)
 - Verify: state of `automation.<id>` is `off` after deploy
@@ -184,13 +275,13 @@ Run after W5 bring-up, W6 PM policy, HA WS reachability confirmed, and scene-exp
   6. `script.<object_id>` (call the script by its own service)
   7. `homeassistant.turn_on` / `homeassistant.toggle` targeting `automation.*`/`script.*`
 
-### 6.4 Gate-closed check (config-write refused, service calls unaffected)
+### 8.4 Gate-closed check (config-write refused, service calls unaffected)
 
 - Delete `fleet/ha_devops_session.json` manually (or let `ha_devops` exit normally)
 - Attempt a config-write → executor must return 401 `[CAP-TOKEN]`
 - Attempt a Tier-B service call (e.g. open a cover via the existing PM path) → must succeed (scope carve-out: Tier-B unaffected by the cap-token gate)
 
-### 6.5 Pre-existing Critical safety automation is protected
+### 8.5 Pre-existing Critical safety automation is protected
 
 - Identify an automation in HA whose body references a Critical entity
 - Attempt `automation_delete` on it → must return 403 `[HARD-DENY]` (§3.4)
@@ -198,7 +289,7 @@ Run after W5 bring-up, W6 PM policy, HA WS reachability confirmed, and scene-exp
 
 ---
 
-## 7. Exposure hygiene prerequisite (cross-ref §3.5)
+## 9. Exposure hygiene prerequisite (cross-ref §3.5)
 
 From `doc/runbooks/ha_v1_exposure.md §3.5`:
 
@@ -210,7 +301,7 @@ Before W7, confirm that operator-authored scenes encoding `automation.*`/`script
 
 ---
 
-## 8. Injection-point decision (W4b flag for `/app`)
+## 10. Injection-point decision (W4b flag for `/app`)
 
 `host/launch-ha-devops.sh` is the bash entry-point for manual launch and legacy setups. The `/app` supervisor (`launchCommand.js` / `supervisor.js`) must replicate the mint + inject logic in Node when spawning the `ha_devops` terminal via node-pty.
 
