@@ -150,6 +150,21 @@ function _getCriticalEntry(entityId, whitelist) {
   return (whitelist.critical_entities || []).find(e => _matchesGlob(e.entity_id, entityId, gs));
 }
 
+// Returns true for entities that are DELIBERATELY classified Critical/Tier-C:
+//   • critical_entities list (exact + glob)
+//   • per_entity_overrides with tier === 'C'
+//   • domain_defaults with value === 'C' (e.g. lock, alarm_control_panel)
+// Returns FALSE for fail-closed unknowns: domains absent from domain_defaults
+// (sensor.*, input_number.*, binary_sensor.*, etc.) → those fail-close to Tier-C
+// but are NOT safety interlocks and must NOT gate NEW-1 delete/upsert.
+function _isDeliberateCritical(entityId, whitelist) {
+  if (_isCritical(entityId, whitelist)) return true;
+  const gs = whitelist.glob_support === true;
+  const ov = (whitelist.per_entity_overrides || []).find(o => _matchesGlob(o.entity_id, entityId, gs));
+  if (ov) return ov.tier === 'C';
+  return (whitelist.domain_defaults || {})[entityId.split('.')[0]] === 'C';
+}
+
 // ── Fleet-enable-deny (§3.3 Q-HA-CONFIGWRITE) ────────────────────────────────
 
 /**
@@ -573,11 +588,16 @@ function scanBody(body, whitelist) {
 
 function _priorBodyHasCritical(body, wl) {
   if (!body) return false;
-  // Conservative: use the full hardened body-scan so Critical refs hidden behind
-  // selectors, templates, or group.* in the PRIOR body also trigger hard-deny.
-  // Any critical_refs OR any hard_deny reason (selector/template/group) → protected.
   const scan = scanBody(body, wl);
-  return scan.critical_refs.length > 0 || scan.hard_deny;
+  // critical_refs contains ALL Tier-C entities — including fail-closed unknowns
+  // (domains absent from domain_defaults: sensor.*, input_number.*, etc.).
+  // Gate NEW-1 on DELIBERATELY-Critical only: critical_entities, per-entity-C,
+  // OR domain-default-C (lock.*, alarm_control_panel.*).
+  // Fail-closed unknowns are NOT safety interlocks — they must not block delete/upsert.
+  const hasActualCritical = scan.critical_refs.some(e => _isDeliberateCritical(e, wl));
+  // Retain hard_deny: opaque prior body (service_template, template in entity
+  // position, selectors) is too risky to assess → conservatively protect.
+  return hasActualCritical || scan.hard_deny;
 }
 
 // ── Scoped WS client — invariant enforcer (§5.3) ─────────────────────────────
@@ -1455,6 +1475,7 @@ module.exports = {
   // Internals exposed for testing
   _matchesGlob,
   _isCritical,
+  _isDeliberateCritical,
   _getCriticalEntry,
   _scopedWsSend,
   _hashBody,

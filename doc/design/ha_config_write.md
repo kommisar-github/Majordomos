@@ -401,6 +401,33 @@ preserved); you simply **cannot delete, disable, or overwrite a pre-existing Cri
 interlock** through the fleet. The §3.1 backstop is case (a), scoped to create /
 non-Critical-prior, so it never collides with this protection. No contradiction.
 
+**NEW-1 Critical discriminator (`_isDeliberateCritical`, 2026-06).** The prior-body
+gate ("references a Tier-C/Critical entity", above) is implemented to fire on
+**deliberately-classified Critical** entities only: (a) the `critical_entities` list
+(exact + glob), (b) `per_entity_overrides` with `tier: C`, and (c) `domain_defaults`
+with value `C` (e.g. `lock.*`, `alarm_control_panel.*`). It does **NOT** fire on
+**fail-closed-unknown Tier-C** — domains absent from `domain_defaults` (`sensor.*`,
+`input_number.*`, `binary_sensor.*`, …) that `classifyEntity` floors to Tier C are
+not safety interlocks and must not gate delete/upsert (a passive battery-capacity
+calculator that only reads `sensor.*`/`input_number.*` is freely replaceable).
+`_isCritical` is checked **first**, so the Critical floor cannot be downgraded by an
+override (M7); a per-entity A/B override on a domain-default-C entity correctly drops
+it (mirrors `classifyEntity` precedence).
+
+**Actuation-can't-hide invariant (inline bodies).** This narrowing is safe **only**
+while every position from which a Critical entity can be *actuated* is either scanned
+into `critical_refs` (literal `entity_id` / `target` / `data.entity_id`) **or**
+`hard_deny`'d (templated entity/service field, `service_template` / `data_template`
+key, `area`/`device`/`label`/`floor` selector, `group.*` expand-or-deny). A read-only
+Critical reference inside a Jinja `value:` string cannot actuate, so it neuters no
+protective behavior. **Carve-out:** `use_blueprint` bodies are surfaced via
+`blueprint_flag` (§4(h)), **not** scanned for host-side actions — completeness for
+blueprints depends on Critical refs arriving as scanned inputs. The
+`_isCritical → _isDeliberateCritical` narrowing holds only while this invariant does;
+**retain the `hard_deny` branch** as the conservative residual, and any scanner
+relaxation that lets actuation hide in an unscanned position must be re-audited
+against this invariant.
+
 **Body-scan's dual role.** The scan's job **shifts from deny-on-Critical to
 label/surface**: the Telegram confirm shows the **full body** + **every Critical
 entity referenced** + the **"created DISABLED — you must enable it in HA"** banner,

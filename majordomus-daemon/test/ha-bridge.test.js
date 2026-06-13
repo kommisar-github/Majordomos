@@ -16,6 +16,7 @@ const {
   FLEET_ENABLE_DENY,
   _matchesGlob,
   _isCritical,
+  _isDeliberateCritical,
   _scopedWsSend,
   _hashBody,
   _priorBodyHasCritical,
@@ -685,6 +686,87 @@ describe('_priorBodyHasCritical', () => {
     const body = { sequence: [{ entity_id: 'switch.visonic_p1_zone1' }] };
     assert.equal(_priorBodyHasCritical(body, wl), true);
   });
+
+  test('returns false for fail-closed Tier-C sensor.* entity (not a Critical interlock)', () => {
+    // sensor.* is not in domain_defaults → Tier C (fail-closed), lands in critical_refs,
+    // but is NOT in critical_entities — should not gate delete/upsert (§3.4 NEW-1 fix).
+    const body = {
+      sequence: [{ service: 'input_number.set_value', data: { entity_id: 'sensor.battery_discharged_energy_total', value: 0 } }],
+    };
+    assert.equal(_priorBodyHasCritical(body, wl), false);
+  });
+
+  test('returns false for fail-closed Tier-C input_number.* entity', () => {
+    const body = {
+      sequence: [{ service: 'input_number.set_value', data: { entity_id: 'input_number.battery_estimated_capacity_wh', value: 0 } }],
+    };
+    assert.equal(_priorBodyHasCritical(body, wl), false);
+  });
+
+  test('returns true for opaque prior body (service_template → hard_deny preserved)', () => {
+    // service_template is an opaque body form → scan.hard_deny=true → conservative deny
+    // even though there are no entity_id references at all.
+    const body = { action: [{ service_template: 'light.turn_on' }] };
+    assert.equal(_priorBodyHasCritical(body, wl), true);
+  });
+
+  test('returns true for prior body referencing lock.* (deliberate domain-C)', () => {
+    const body = { sequence: [{ service: 'lock.lock', target: { entity_id: 'lock.front_door' } }] };
+    assert.equal(_priorBodyHasCritical(body, wl), true);
+  });
+
+  test('returns true for prior body referencing alarm_control_panel.* (deliberate domain-C)', () => {
+    const body = { sequence: [{ service: 'alarm_control_panel.alarm_arm_home', target: { entity_id: 'alarm_control_panel.home' } }] };
+    assert.equal(_priorBodyHasCritical(body, wl), true);
+  });
+});
+
+// ── W2: _isDeliberateCritical ─────────────────────────────────────────────────
+
+describe('_isDeliberateCritical', () => {
+  const wl = BASE_WHITELIST;
+
+  test('critical_entities exact match → true', () => {
+    assert.equal(_isDeliberateCritical('switch.main_breaker', wl), true);
+  });
+
+  test('critical_entities glob match (switch.visonic_p1_*) → true', () => {
+    assert.equal(_isDeliberateCritical('switch.visonic_p1_zone1', wl), true);
+  });
+
+  test('deliberate domain-C: lock.* → true', () => {
+    assert.equal(_isDeliberateCritical('lock.front_door', wl), true);
+  });
+
+  test('deliberate domain-C: alarm_control_panel.* → true', () => {
+    assert.equal(_isDeliberateCritical('alarm_control_panel.home', wl), true);
+  });
+
+  test('per-entity override tier C → true', () => {
+    const wlWithOverride = { ...wl, per_entity_overrides: [{ entity_id: 'cover.garage', tier: 'C' }] };
+    assert.equal(_isDeliberateCritical('cover.garage', wlWithOverride), true);
+  });
+
+  test('domain-default A (light.*) → false', () => {
+    assert.equal(_isDeliberateCritical('light.office', wl), false);
+  });
+
+  test('domain-default B (automation.*) → false', () => {
+    assert.equal(_isDeliberateCritical('automation.morning_routine', wl), false);
+  });
+
+  test('fail-closed unknown domain (sensor.*) → false', () => {
+    assert.equal(_isDeliberateCritical('sensor.battery_discharged_energy_total', wl), false);
+  });
+
+  test('fail-closed unknown domain (input_number.*) → false', () => {
+    assert.equal(_isDeliberateCritical('input_number.battery_start_soc', wl), false);
+  });
+
+  test('per-entity override tier A on a non-Critical entity → false', () => {
+    // script.goodnight has per-entity override A
+    assert.equal(_isDeliberateCritical('script.goodnight', wl), false);
+  });
 });
 
 // ── W2: scanBody — §4 a–i ────────────────────────────────────────────────────
@@ -925,6 +1007,56 @@ describe('executeConfigWrite — automation_upsert', () => {
     );
   });
 
+  test('NEW-1 does NOT hard-deny when prior body references only sensor.* (fail-closed Tier-C)', async () => {
+    // Regression for §3.4 NEW-1 false-positive: sensor.*/input_number.* in prior body
+    // should not gate upsert — they are fail-closed Tier C, not Critical interlocks.
+    let postedBody = null;
+    const opts = mkOpts({
+      haGet: async () => ({
+        sequence: [
+          { service: 'input_number.set_value', data: { entity_id: 'sensor.battery_discharged_energy_total', value: 0 } },
+          { service: 'input_number.set_value', data: { entity_id: 'input_number.battery_start_soc', value: 0 } },
+        ],
+      }),
+      haPost: async (domain, id, body) => { postedBody = body; },
+    });
+    await executeConfigWrite({
+      op: 'automation_upsert',
+      payload: { object_id: 'battery_state_of_health_calculator', body: { action: [{ service: 'light.turn_off', target: { entity_id: 'light.office' } }] } },
+      confirm_id: 'c6',
+    }, 'tok', opts);
+    assert.ok(postedBody !== null, 'expected POST to HA (upsert succeeded)');
+    assert.equal(postedBody.initial_state, false);
+  });
+
+  test('hard-deny NEW-1: prior body references lock.* (deliberate domain-C, §3.4)', async () => {
+    const opts = mkOpts({
+      haGet: async () => ({ sequence: [{ service: 'lock.lock', target: { entity_id: 'lock.front_door' } }] }),
+    });
+    await assert.rejects(
+      () => executeConfigWrite({
+        op: 'automation_upsert',
+        payload: { object_id: 'lock_auto', body: { action: [] } },
+        confirm_id: 'c7',
+      }, 'tok', opts),
+      /HARD-DENY.*prior body.*Critical/
+    );
+  });
+
+  test('hard-deny NEW-1: prior body references alarm_control_panel.* (deliberate domain-C, §3.4)', async () => {
+    const opts = mkOpts({
+      haGet: async () => ({ sequence: [{ service: 'alarm_control_panel.alarm_arm_home', target: { entity_id: 'alarm_control_panel.home' } }] }),
+    });
+    await assert.rejects(
+      () => executeConfigWrite({
+        op: 'automation_upsert',
+        payload: { object_id: 'alarm_auto', body: { action: [] } },
+        confirm_id: 'c8',
+      }, 'tok', opts),
+      /HARD-DENY.*prior body.*Critical/
+    );
+  });
+
   test('backstop turn_off called when state is on after upsert', async () => {
     let backstopCalled = false;
     const opts = mkOpts({
@@ -986,6 +1118,58 @@ describe('executeConfigWrite — automation_delete', () => {
       'tok', opts
     );
     assert.equal(result.applied, true);
+  });
+
+  test('succeeds when prior body references only sensor.* (fail-closed Tier-C, not a Critical interlock)', async () => {
+    // Regression for §3.4 NEW-1 false-positive: the SoH calculator prior body contains
+    // sensor.* and input_number.* entities. These hit Tier-C (fail-closed) in scanBody
+    // because their domains are absent from domain_defaults, but they are NOT in
+    // critical_entities. Delete must not be hard-denied in this case.
+    const opts = {
+      whitelist: wl, validateCapToken: okToken,
+      haGet: async () => ({
+        sequence: [
+          { service: 'input_number.set_value', data: { entity_id: 'sensor.battery_discharged_energy_total', value: 0 } },
+          { service: 'input_number.set_value', data: { entity_id: 'input_number.battery_estimated_capacity_wh', value: 0 } },
+        ],
+      }),
+      haDelete: async () => null,
+    };
+    const result = await executeConfigWrite(
+      { op: 'automation_delete', payload: { object_id: 'battery_state_of_health_calculator' }, confirm_id: 'c13' },
+      'tok', opts
+    );
+    assert.equal(result.applied, true);
+  });
+
+  test('hard-deny: prior body references lock.* (deliberate domain-C, §3.4)', async () => {
+    const opts = {
+      whitelist: wl, validateCapToken: okToken,
+      haGet: async () => ({ sequence: [{ service: 'lock.lock', target: { entity_id: 'lock.front_door' } }] }),
+      haDelete: async () => null,
+    };
+    await assert.rejects(
+      () => executeConfigWrite(
+        { op: 'automation_delete', payload: { object_id: 'lock_auto' }, confirm_id: 'c14' },
+        'tok', opts
+      ),
+      /HARD-DENY.*prior body.*Critical/
+    );
+  });
+
+  test('hard-deny: prior body references alarm_control_panel.* (deliberate domain-C, §3.4)', async () => {
+    const opts = {
+      whitelist: wl, validateCapToken: okToken,
+      haGet: async () => ({ sequence: [{ service: 'alarm_control_panel.alarm_arm_home', target: { entity_id: 'alarm_control_panel.home' } }] }),
+      haDelete: async () => null,
+    };
+    await assert.rejects(
+      () => executeConfigWrite(
+        { op: 'automation_delete', payload: { object_id: 'alarm_auto' }, confirm_id: 'c15' },
+        'tok', opts
+      ),
+      /HARD-DENY.*prior body.*Critical/
+    );
   });
 });
 
