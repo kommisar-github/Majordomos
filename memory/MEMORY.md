@@ -13,6 +13,7 @@ Canonical project facts (architecture, decisions, failure modes) belong in
 - [HA devops hard gate](ha-devops-hard-gate.md) — operator rule: no ha_devops terminal running ⇒ zero HA changes; ha_devops is Task-Router-only, never forked; enforced at executor layer
 - [HA devops launcher](ha-devops-launcher.md) — ha_devops uses agents.json `launcher` (host/launch-ha-devops.sh) to mint its cap-token (v4.13); auto-runs only on v1.4.0+ bundle, else launch manually
 - [Majordomus daemon naming](majordomus-daemon-naming.md) — host package renamed mcp-task-router-app → majordomus-daemon (2026-06-11, e7b9a2f); launch + what the daemon bundles
+- [Battery SoH config-write](battery-soh-config-write.md) — AGM SoH calculator (Pass 2) deployed via gated config-write; pending operator HA-UI enable steps + executor lessons (object_id=numeric-not-slug, NEW-1 _isDeliberateCritical); origin/main=11f1d73 (2026-06-13)
 
 ## Update protocol
 
