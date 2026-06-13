@@ -23,7 +23,7 @@ const AUDIT_PATH = path.resolve(__dirname, '../../fleet/ha_config_audit.jsonl');
 
 const CONFIG_WRITE_OPS = new Set([
   'helper_create', 'helper_update', 'helper_delete',
-  'template_sensor_create', 'template_sensor_delete',
+  'template_sensor_create', 'template_sensor_update', 'template_sensor_delete',
   'automation_upsert', 'automation_delete',
   'script_upsert', 'script_delete',
   'undo_config_write',
@@ -1084,6 +1084,117 @@ async function _templateSensorDelete(payload, confirm_id, wl, opts) {
   return { op: 'template_sensor_delete', applied: true, audit_id, result };
 }
 
+async function _templateSensorUpdate(payload, confirm_id, wl, opts) {
+  const { entity_id, state } = payload || {};
+  if (!entity_id) throw new Error('template_sensor_update: payload.entity_id required');
+  if (!state)     throw new Error('template_sensor_update: payload.state required');
+
+  // Body-scan BEFORE any I/O (template sensors are read-only; hard_deny always false)
+  const scan = _scanTemplateSensor(payload, wl);
+
+  // Normalize entity_id — trim + lowercase BEFORE Critical check (§4(f))
+  const normId = (entity_id || '').trim().toLowerCase();
+  if (!normId.startsWith('sensor.')) {
+    throw new Error(`[TEMPLATE-SENSOR-NOT-FOUND] template_sensor_update: entity_id must start with "sensor." — got "${entity_id}"`);
+  }
+
+  // Critical guard: HARD-DENY before any flow I/O (§3.4 NEW-1 defense-in-depth)
+  if (_isCritical(normId, wl)) {
+    throw new Error(
+      `[HARD-DENY] template_sensor_update: "${normId}" is a Critical entity — update refused (§3.4 NEW-1).`
+    );
+  }
+
+  // Resolve entity_id → entry_id: list template config entries, match by slugified title
+  const listEntries = opts.listTemplateEntries ||
+    (() => _haRestRequest('GET', '/api/config/config_entries/entry?domain=template'));
+  const allEntries = await listEntries();
+  if (!Array.isArray(allEntries)) {
+    throw new Error('[TEMPLATE-SENSOR-NOT-FOUND] template_sensor_update: could not list template config entries');
+  }
+  const matches = allEntries.filter(e => {
+    const slug = _slugify(e.title || '');
+    return slug && `sensor.${slug}` === normId;
+  });
+  if (matches.length === 0) {
+    const err = new Error(
+      `[TEMPLATE-SENSOR-NOT-FOUND] template_sensor_update: no template entry matching "${normId}" — update refused (fail-closed).`
+    );
+    _appendAudit({ op: 'template_sensor_update', confirm_id, payload, outcome: 'failure', error: err.message });
+    throw err;
+  }
+  if (matches.length > 1) {
+    const err = new Error(
+      `[TEMPLATE-SENSOR-AMBIGUOUS] template_sensor_update: ${matches.length} template entries match "${normId}" — update refused (fail-closed).`
+    );
+    _appendAudit({ op: 'template_sensor_update', confirm_id, payload, outcome: 'failure', error: err.message });
+    throw err;
+  }
+  const entry_id = matches[0].entry_id;
+
+  // Options flow: single step — init returns form with suggested_values (current config)
+  const optionsInit     = opts.optionsInit     || ((handler) => _haRestRequest('POST',   '/api/config/config_entries/options/flow',        { handler }));
+  const optionsProgress = opts.optionsProgress || ((id, data) => _haRestRequest('POST',  `/api/config/config_entries/options/flow/${id}`,  data));
+  const optionsAbort    = opts.optionsAbort    || ((id)       => _haRestRequest('DELETE', `/api/config/config_entries/options/flow/${id}`));
+
+  let flowId = null;
+  try {
+    // Step 1: init — returns form directly (no menu step; suggested_values = current config)
+    const initResult = await optionsInit(entry_id);
+    flowId = initResult && initResult.flow_id;
+    if (!flowId) throw new Error('[TEMPLATE-SENSOR] options init did not return flow_id');
+    if (initResult.type !== 'form') throw new Error(`[TEMPLATE-SENSOR] expected form from options init, got type="${initResult.type}"`);
+
+    // Capture prior values from suggested_values (for audit + preserve unspecified optionals)
+    const suggested = {};
+    for (const field of (initResult.data_schema || [])) {
+      if (field.description && field.description.suggested_value !== undefined) {
+        suggested[field.name] = field.description.suggested_value;
+      }
+    }
+    const prior = {
+      state: suggested.state,
+      unit_of_measurement: suggested.unit_of_measurement,
+      device_class: suggested.device_class,
+      state_class: suggested.state_class,
+    };
+
+    // Build submit body: payload overrides; suggested_value preserves unprovided optionals
+    const formData = { state };
+    for (const f of ['unit_of_measurement', 'device_class', 'state_class']) {
+      const val = payload[f] !== undefined ? payload[f] : suggested[f];
+      if (val !== undefined) formData[f] = val;
+    }
+
+    // Step 2: submit → update entry → expect create_entry
+    const updateResult = await optionsProgress(flowId, formData);
+    if (updateResult.type !== 'create_entry') {
+      throw new Error(
+        `[TEMPLATE-SENSOR] expected create_entry from options flow, got type="${updateResult.type}"` +
+        (updateResult.errors ? ` errors=${JSON.stringify(updateResult.errors)}` : '')
+      );
+    }
+
+    const audit_id = crypto.randomUUID();
+    _appendAudit({
+      audit_id, confirm_id, op: 'template_sensor_update',
+      payload, entity_id: normId, entry_id,
+      prior, critical_refs: scan.critical_refs,
+      outcome: 'success',
+    });
+    return {
+      op: 'template_sensor_update', applied: true, audit_id,
+      entry_id, entity_id: normId, critical_refs: scan.critical_refs,
+    };
+  } catch (err) {
+    if (flowId) {
+      try { await optionsAbort(flowId); } catch { /* best-effort */ }
+    }
+    _appendAudit({ op: 'template_sensor_update', confirm_id, payload, outcome: 'failure', error: err.message });
+    throw err;
+  }
+}
+
 async function _executeUndo({ payload, confirm_id }, capToken, opts) {
   const { audit_id } = payload || {};
   if (!audit_id) throw new Error('undo_config_write: payload.audit_id required');
@@ -1253,6 +1364,7 @@ async function executeConfigWrite({ op, payload, confirm_id }, capToken, opts = 
     case 'helper_update':          return _helperUpdate(payload, confirm_id, wl, opts);
     case 'helper_delete':          return _helperDelete(payload, confirm_id, wl, opts);
     case 'template_sensor_create': return _templateSensorCreate(payload, confirm_id, wl, opts);
+    case 'template_sensor_update': return _templateSensorUpdate(payload, confirm_id, wl, opts);
     case 'template_sensor_delete': return _templateSensorDelete(payload, confirm_id, wl, opts);
     default: throw new Error(`[UNSUPPORTED-OP] unreachable — "${op}"`);
   }

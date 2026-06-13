@@ -1663,3 +1663,153 @@ describe('executeConfigWrite — template_sensor_create', () => {
     assert.equal(abortCalled, true, 'flowAbort must be called on create_entry mismatch');
   });
 });
+
+// ── W2: executeConfigWrite — template_sensor_update ──────────────────────────
+
+describe('executeConfigWrite — template_sensor_update', () => {
+  const wl = BASE_WHITELIST;
+  const okToken = async () => true;
+
+  // Options flow: single-step — init returns form with suggested_values
+  const OPTS_FORM = {
+    type: 'form', flow_id: 'opts-flow-1', step_id: 'sensor', last_step: true,
+    data_schema: [
+      { name: 'state',               description: { suggested_value: '{{ 42 }}'   }, required: true  },
+      { name: 'unit_of_measurement', description: { suggested_value: '%'           }, required: false, optional: true },
+      { name: 'device_class',        description: { suggested_value: 'battery'     }, required: false, optional: true },
+      { name: 'state_class',         description: { suggested_value: 'measurement' }, required: false, optional: true },
+    ],
+    errors: null,
+  };
+  const OPTS_RESULT = { type: 'create_entry', flow_id: 'opts-flow-1', entry_id: 'entry-abc' };
+
+  const TEMPLATE_ENTRIES = [
+    { entry_id: 'entry-abc', title: 'Battery State of Health', state: 'loaded' },
+  ];
+
+  function mkOpts(overrides = {}) {
+    return {
+      whitelist: wl,
+      validateCapToken: okToken,
+      listTemplateEntries: async () => TEMPLATE_ENTRIES,
+      optionsInit: async () => OPTS_FORM,
+      optionsProgress: async () => OPTS_RESULT,
+      optionsAbort: async () => null,
+      ...overrides,
+    };
+  }
+
+  test('happy path: resolves entry_id, submits options flow, returns applied+entry_id', async () => {
+    const progressCalls = [];
+    const result = await executeConfigWrite({
+      op: 'template_sensor_update',
+      payload: {
+        entity_id: 'sensor.battery_state_of_health',
+        state: '{% set rated_wh=4800 %}{{ (states("input_number.battery_estimated_capacity_wh")|float(0)/rated_wh*100)|round(1) }}',
+      },
+      confirm_id: 'tsu-c1',
+    }, 'tok', mkOpts({
+      optionsProgress: async (id, data) => { progressCalls.push({ id, data }); return OPTS_RESULT; },
+    }));
+
+    assert.equal(result.op, 'template_sensor_update');
+    assert.equal(result.applied, true);
+    assert.equal(result.entry_id, 'entry-abc');
+    assert.equal(result.entity_id, 'sensor.battery_state_of_health');
+    assert.deepEqual(result.critical_refs, []);
+    assert.ok(result.audit_id);
+    // Must forward the new state
+    assert.ok(progressCalls[0].data.state.includes('rated_wh=4800'));
+    // Must preserve current optional fields from suggested_values
+    assert.equal(progressCalls[0].data.unit_of_measurement, '%');
+    assert.equal(progressCalls[0].data.device_class, 'battery');
+    assert.equal(progressCalls[0].data.state_class, 'measurement');
+  });
+
+  test('entity_id→entry_id: no match → TEMPLATE-SENSOR-NOT-FOUND, abort not called', async () => {
+    let abortCalled = false;
+    await assert.rejects(
+      () => executeConfigWrite({
+        op: 'template_sensor_update',
+        payload: { entity_id: 'sensor.nonexistent', state: '{{ 0 }}' },
+        confirm_id: 'tsu-c2',
+      }, 'tok', mkOpts({
+        listTemplateEntries: async () => TEMPLATE_ENTRIES,
+        optionsAbort: async () => { abortCalled = true; },
+      })),
+      /TEMPLATE-SENSOR-NOT-FOUND/
+    );
+    assert.equal(abortCalled, false, 'abort must not be called when resolution fails (no flow initiated)');
+  });
+
+  test('Critical target entity → HARD-DENY before any flow I/O', async () => {
+    const critWl = {
+      ...wl,
+      critical_entities: [...wl.critical_entities, { entity_id: 'sensor.battery_state_of_health', operator_finalize: true }],
+    };
+    let initCalled = false;
+    await assert.rejects(
+      () => executeConfigWrite({
+        op: 'template_sensor_update',
+        payload: { entity_id: 'sensor.battery_state_of_health', state: '{{ 0 }}' },
+        confirm_id: 'tsu-c3',
+      }, 'tok', {
+        whitelist: critWl,
+        validateCapToken: okToken,
+        listTemplateEntries: async () => TEMPLATE_ENTRIES,
+        optionsInit: async () => { initCalled = true; return OPTS_FORM; },
+        optionsProgress: async () => OPTS_RESULT,
+        optionsAbort: async () => null,
+      }),
+      /HARD-DENY.*NEW-1/
+    );
+    assert.equal(initCalled, false, 'optionsInit must not be called when Critical guard denies');
+  });
+
+  test('body-scan: Critical entity in new state template → critical_refs surfaced, not denied', async () => {
+    const result = await executeConfigWrite({
+      op: 'template_sensor_update',
+      payload: {
+        entity_id: 'sensor.battery_state_of_health',
+        // switch.main_breaker is Critical in BASE_WHITELIST
+        state: "{{ states('switch.main_breaker') }}",
+      },
+      confirm_id: 'tsu-c4',
+    }, 'tok', mkOpts());
+
+    assert.equal(result.applied, true);
+    assert.ok(result.critical_refs.includes('switch.main_breaker'), 'critical_refs must surface switch.main_breaker');
+  });
+
+  test('mid-flow error → optionsAbort called with correct flow_id', async () => {
+    let abortCalledWith = null;
+    await assert.rejects(
+      () => executeConfigWrite({
+        op: 'template_sensor_update',
+        payload: { entity_id: 'sensor.battery_state_of_health', state: '{{ 0 }}' },
+        confirm_id: 'tsu-c5',
+      }, 'tok', mkOpts({
+        optionsProgress: async (id) => { throw new Error('[TEST] HA options step rejected'); },
+        optionsAbort: async (id) => { abortCalledWith = id; },
+      })),
+      /TEST.*HA options step rejected/
+    );
+    assert.equal(abortCalledWith, 'opts-flow-1', 'optionsAbort must be called with the flow_id on error');
+  });
+
+  test('options flow returns form-with-errors on submit → TEMPLATE-SENSOR error thrown, abort called', async () => {
+    let abortCalled = false;
+    await assert.rejects(
+      () => executeConfigWrite({
+        op: 'template_sensor_update',
+        payload: { entity_id: 'sensor.battery_state_of_health', state: '{% bad %}' },
+        confirm_id: 'tsu-c6',
+      }, 'tok', mkOpts({
+        optionsProgress: async () => ({ type: 'form', step_id: 'sensor', errors: { state: 'invalid_template' } }),
+        optionsAbort: async () => { abortCalled = true; },
+      })),
+      /TEMPLATE-SENSOR.*create_entry/
+    );
+    assert.equal(abortCalled, true, 'optionsAbort must be called on create_entry mismatch');
+  });
+});
