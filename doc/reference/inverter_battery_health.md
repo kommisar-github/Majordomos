@@ -1,5 +1,5 @@
 # Inverter Battery Health — Deye ESP32+OLED
-**Last Updated:** 2026-06-09
+**Last Updated:** 2026-06-13 (battery health snapshot is the 2026-06-09 point-in-time baseline; SoH/chemistry/unit facts corrected 2026-06-13)
 **Owner:** `/ha`
 
 ## Abstract
@@ -10,8 +10,8 @@
 
 **Key facts:**
 - All inverter sensors are REST-only under `sensor.inverter_esp32oled_*` — none MCP-exposed.
-- The SoH calculator automation (id `1773779229092`) is enabled and firing but silently no-ops because its 3 target `input_number` helpers do not exist in HA.
-- No current SoH% is derivable until the operator creates the helpers and one qualifying discharge cycle completes.
+- **Battery chemistry is AGM lead-acid (Monbat 12MVR200 ×2 series = 24V, ~4.8 kWh) — NOT LiFePO4.** See `doc/reference/battery_monbat_12mvr200.md`.
+- **(2026-06-13) All three helpers now exist and are populated; `sensor.battery_state_of_health` is deployed and live.** A unit bug was found+fixed (the capacity helper stores **kWh**, not Wh; template uses `rated_kwh = 4.8`). The point reading is volatile on shallow cycles — Peukert/temp normalization + EMA smoothing recommended (see battery_monbat_12mvr200.md §9).
 - AMBER: `sensor.inverter_esp32oled_controller_temperature` = 58.3°C at time of snapshot (~6.7°C headroom to typical 65°C limit).
 
 **Owner:** `/ha` (Primary per DOC_OWNERSHIP_MATRIX.md)
@@ -37,7 +37,7 @@
 
 **Verdict: HEALTHY**
 
-Justification: SoC cycling normally (50%→100% in 24h), running_status=Normal, battery temperature stable and well within LiFePO4 safe range, voltage consistent with a healthy 24V pack, lifetime throughput modest (~1,860 kWh, indicating early-to-mid life).
+Justification: SoC cycling normally (50%→100% in 24h), running_status=Normal, battery temperature stable and well within the AGM lead-acid safe range, voltage consistent with a healthy 24V pack, lifetime throughput modest (~1,860 kWh).
 
 ### Dedicated Health Sensors
 
@@ -45,7 +45,7 @@ Justification: SoC cycling normally (50%→100% in 24h), running_status=Normal, 
 |---|---|---|---|
 | `sensor.inverter_esp32oled_battery_capacity` | 100% (24h: min 50%, max 100%) | 20–100% | ✅ IN RANGE |
 | `sensor.inverter_esp32oled_battery_voltage` | 27.68V (24h: min 24.22V, max 29.32V) | 24.0–29.2V | ✅ IN RANGE |
-| `sensor.inverter_esp32oled_battery_current` | −2.33A (discharging) | −100A to +20A | ✅ IN RANGE |
+| `sensor.inverter_esp32oled_battery_current` | −2.33A (charging — negative = into battery; float at 100% SoC) | −100A to +20A | ✅ IN RANGE |
 | `sensor.inverter_esp32oled_battery_power` | −64W | — | ✅ light load |
 | `sensor.inverter_esp32oled_temperature_battery` | 32.1°C (24h: min 27.8°C, max 32.2°C) | ≤45°C | ✅ IN RANGE |
 | `sensor.inverter_esp32oled_temperature_dc_transformer` | 46.6°C | ≤65°C typical | ✅ IN RANGE |
@@ -57,7 +57,7 @@ Justification: SoC cycling normally (50%→100% in 24h), running_status=Normal, 
 
 **AMBER flag — controller temperature (58.3°C):** 6.7°C below the typical Deye limit of 65°C. Elevated but not alarming at time of snapshot. Monitor, especially in summer. Recommend alerting at 62°C. Confirm inverter has adequate ventilation.
 
-**Lifetime throughput:** charge 1,061.8 kWh + discharge 797.8 kWh ≈ **1,859.6 kWh total**. For a typical 5–10 kWh LiFePO4 pack rated at 2,000–6,000 cycles, this is early-to-mid life.
+**Lifetime throughput:** charge 1,061.8 kWh + discharge 797.8 kWh ≈ **1,859.6 kWh total**. For this ~4.8 kWh AGM lead-acid bank (200 Ah × 24 V), cycle life at ≤50% DoD is typically ~300–600 cycles; ~1,860 kWh throughput is moderate usage (cycle count is not exposed by the firmware).
 
 ---
 
@@ -99,7 +99,7 @@ Missing helpers:
 |---|---|
 | `input_number.battery_start_energy` | Snapshot of `sensor.battery_discharged_energy_total` at full charge |
 | `input_number.battery_start_soc` | Snapshot of SoC% at full charge |
-| `input_number.battery_estimated_capacity_wh` | **The computed output** — measured pack capacity in Wh |
+| `input_number.battery_estimated_capacity_wh` | **The computed output** — measured pack capacity in **kWh** (the entity is mislabeled `_wh` but the value is kWh — see §5) |
 
 ### What the automation computes
 
@@ -121,7 +121,7 @@ if soc_diff > 10:
 
 Example: 50% SoC discharged → 2.5 kWh consumed → estimated capacity = 5.0 kWh (5,000 Wh).
 
-**Formula assessment:** Sound empirical approach. Output is pack capacity in **Wh** (not SoH% directly). To derive SoH%: `SoH% = (battery_estimated_capacity_wh / rated_capacity_wh) × 100`. The rated capacity is not in HA data — the operator must supply it from the battery datasheet.
+**Formula assessment:** Sound empirical approach. Output is pack capacity in **kWh** (not SoH% directly; note the `_wh` entity name is a mislabel — the value is kWh). To derive SoH%: `SoH% = (battery_estimated_capacity / rated_kWh) × 100`. **Rated capacity = 4.8 kWh** (200 Ah × 24 V, C20 @ 25 °C, per the Monbat 12MVR200 datasheet — see `doc/reference/battery_monbat_12mvr200.md`); it is hardcoded in the deployed `sensor.battery_state_of_health` template.
 
 ---
 
@@ -135,7 +135,7 @@ Go to: **Settings → Devices & Services → Helpers → + Create Helper → Num
 |---|---|---|---|---|---|
 | Battery Start Energy | `input_number.battery_start_energy` | 0 | 100000 | 0.001 | kWh |
 | Battery Start SoC | `input_number.battery_start_soc` | 0 | 100 | 0.1 | % |
-| Battery Estimated Capacity Wh | `input_number.battery_estimated_capacity_wh` | 0 | 100000 | 1 | Wh |
+| Battery Estimated Capacity | `input_number.battery_estimated_capacity_wh` | 0 | 100000 | 0.001 | **kWh** (the entity_id keeps the legacy `_wh` suffix to match the automation, but the unit is kWh) |
 
 The entity_ids must match exactly as listed — the automation references them by these names.
 
@@ -153,22 +153,24 @@ template:
         unit_of_measurement: "%"
         state_class: measurement
         state: >
-          {# OPERATOR: replace 5000 with your battery's rated capacity in Wh         #}
-          {# Example: 200Ah × 24V = 4800 Wh; 100Ah × 48V = 4800 Wh                   #}
-          {% set rated_wh = 5000 %}
+          {# rated_kwh = 4.8 → Monbat 12MVR200 ×2 series, 200 Ah × 24 V, C20 @ 25 °C #}
+          {# capacity helper holds kWh (not Wh), so rated must be kWh too            #}
+          {% set rated_kwh = 4.8 %}
           {% set measured = states('input_number.battery_estimated_capacity_wh') | float(0) %}
           {% if measured > 0 %}
-            {{ (measured / rated_wh * 100) | round(1) }}
+            {{ (measured / rated_kwh * 100) | round(1) }}
           {% else %}
             unknown
           {% endif %}
 ```
 
+> **Deployed (2026-06-13):** `sensor.battery_state_of_health` is live as a **REST config-flow template sensor** (entry_id `01KTZ32BGAE6H78EB1G70ZEYQS`), not a `configuration.yaml` entry — created/updated via the gated `ha_devops` config-write path with `rated_kwh = 4.8`.
+
 ---
 
 ## 6. Caveats
 
-**No current SoH derivable.** The formula requires a baseline snapshot (`battery_start_energy`, `battery_start_soc`) captured at the last full-charge event. Since the helpers never existed, no baseline was ever stored. The earliest a real SoH reading will appear: after the helpers are created AND the battery completes one full charge → discharge (>10% SoC drop) → charge-start cycle.
+**SoH baseline ESTABLISHED (2026-06-13) — supersedes the original "no SoH derivable" note.** All three helpers now exist and populate; `sensor.battery_state_of_health` is deployed (REST config-flow template sensor, `rated_kwh = 4.8`). **Caveat — point reading is volatile:** the value swings with each cycle's measurement quality. On a shallow cycle the `soc_diff > 10%` guard can pass on a near-trivial discharge and write a bad capacity (observed 2026-06-13: helper = 0.347 kWh → SoH 7.2%; a good full-depth cycle gives ~5.167 kWh → ~107%). For a trustworthy number, deploy the Peukert + temperature normalization and EMA smoothing in `doc/reference/battery_monbat_12mvr200.md` §9, and tighten the cycle guard (require a deeper, consistent ΔSoC).
 
 **`battery_discharged_energy_total` discrepancy.** At time of snapshot:
 - `sensor.battery_discharged_energy_total` = 191.821 kWh (used by the SoH formula)

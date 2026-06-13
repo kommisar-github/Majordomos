@@ -23,7 +23,7 @@ Deye SoC.
   bank ≈ **4.80 kWh** at 25 °C. Use **`rated_kwh = 4.8`** (25 °C reference).
 - **Peukert k ≈ 1.12** (derived from the 25 °C table — Monbat publishes none).
   A ~29 A discharge (~6 h rate) delivers only ~88% of C20; multiply measured
-  capacity by ~1.13 to recover the C20 reference.
+  capacity by ~1.14 to recover the C20 reference.
 - Capacity is **temperature-dependent** (datasheet table below); the Deye reports
   SoC **voltage-based** (lead-acid mode, no coulomb counting) → ΔSoC carries error,
   but the per-night voltage thresholds are repeatable so the SoH *trend* stays valid.
@@ -119,7 +119,7 @@ To normalize a measured capacity to 25 °C, divide by the 25 °C-rebased factor
 | 20 h ↔ 10 h (low rate) | 10.0 A / 19.0 A | ≈ 1.08 |
 | 20 h ↔ 6 h (operating span) | 10.0 A / 29.4 A | **≈ 1.12** |
 | 20 h ↔ 5 h | 10.0 A / 33.6 A | ≈ 1.14 |
-| 10 h ↔ 5 h (high rate) | 19.0 A / 33.6 A | ≈ 1.17 |
+| 10 h ↔ 5 h (high rate) | 19.0 A / 33.6 A | ≈ 1.21 |
 
 (20 °C table runs higher: 20h↔5h ≈ 1.17.) `k` is not perfectly constant — choose
 for the operating rate. The fleet's nightly discharge is ~29 A ≈ the **6 h rate**,
@@ -127,7 +127,7 @@ normalizing back to the C20 (10 A) reference → **use k = 1.12**.
 
 **Rate-correction (recover C20 from a measured cycle):**
 `C20 = measured × (I_avg / 10)^(k − 1)`, with k = 1.12, I_avg = mean discharge current.
-At I_avg = 29 A: factor ≈ ×1.13. (Most accurate alternative: interpolate the table
+At I_avg = 29 A: factor ≈ ×1.14 (1.136). (Most accurate alternative: interpolate the table
 directly — C20 200 Ah ÷ capacity-at-actual-rate.)
 
 ## 8. Charge Regime (20 °C)
