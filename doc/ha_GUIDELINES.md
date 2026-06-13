@@ -131,9 +131,16 @@ consistency via `/pm audit`.
   `script_upsert` skips it (the run-deny is the whole control for scripts). Spec: `ha_config_write.md` §3.1.
 
 - **NEW-1 overwrite-protection — GET-first prior-body classify.** `automation_upsert`/`script_upsert`
-  onto a pre-existing object whose *prior* body references a Critical entity ⇒ `[HARD-DENY]`, even with a
-  benign new body (`scanBody(prior)` runs first; blocks "launder a neuter" of a safety interlock). A genuine
-  create (`prior === null`) is unaffected. Spec: `ha_config_write.md` §3.4 / §5.2-4.
+  onto a pre-existing object whose *prior* body references a **deliberate** Critical entity ⇒ `[HARD-DENY]`,
+  even with a benign new body (`scanBody(prior)` runs first; blocks "launder a neuter" of a safety interlock).
+  A genuine create (`prior === null`) is unaffected. **`_isDeliberateCritical` discriminator (commit 11f1d73):**
+  gates only on entities that are *deliberately* Critical — (a) the `critical_entities` list (exact + glob),
+  (b) `per_entity_overrides` with `tier: C`, or (c) `domain_defaults` with value `C` (e.g. `lock.*`,
+  `alarm_control_panel.*`). **Does NOT fire on fail-closed-unknown Tier-C** — domains absent from
+  `domain_defaults` (`sensor.*`, `input_number.*`, `binary_sensor.*`, …) that `classifyEntity` floors to
+  Tier C because they are unclassified are NOT safety interlocks and MUST NOT gate delete/upsert. A passive
+  battery-capacity calculator referencing only `sensor.*`/`input_number.*` is freely replaceable.
+  Spec: `ha_config_write.md` §3.4 / §5.2-4.
 
 - **WS client is command-type scoped — never `call_service`.** The one-shot WS client (`_scopedWsSend`)
   rejects any `type` outside the enumerated config-command set **at the client boundary, before any network
@@ -192,6 +199,17 @@ consistency via `/pm audit`.
   the check passes, bind every subsequent I/O (list → resolve → delete) to the
   **same** normalized entity_id that cleared the check — no TOCTOU; the resolve step
   runs **after** the Critical check, never before. Fail-closed on no match.
+
+- **Automation/script REST config API — `object_id` is the numeric internal ID, NOT the slug.**
+  `GET/POST/DELETE /api/config/automation/config/<object_id>` expects the **numeric** config ID
+  (e.g. `1773779229092` for `automation.battery_state_of_health_calculator`), not the slug
+  (`battery_state_of_health_calculator`). Using the slug 404s on GET → the executor treats it as a
+  genuine create → **duplicate** object instead of an overwrite (bit both a helper and an automation
+  this session). Resolution (GET-first, mandatory for updates and deletes): `GET /api/config/automation/config`
+  (list all) → match by `alias` → extract the numeric `id`. Same two-round resolve as the WS helper
+  pattern (`<type>/list` → match entity_id → use `id`). For creates, HA generates the numeric id.
+  Same applies to the script config API. Never assume `slug == numeric id`. *(Endpoint mechanics are
+  /ha-verified implementation detail; the durable invariant is "object_id is numeric, GET-first".)*
 
 - **Known executor debt (recorded to prevent re-discovery):**
 
