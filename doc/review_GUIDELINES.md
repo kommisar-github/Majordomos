@@ -107,6 +107,59 @@ algorithm or restrict+validate inputs to the safe (ASCII) subset. Flag any
 gate-bearing identifier that is reconstructed rather than echoed back from the
 platform.
 
+### Interlock protection gates on deliberately-declared, not fail-closed-default, criticality
+When a guard hard-denies a destructive change (delete / disable / overwrite) to a pre-existing
+object *because its prior body references a "Critical" entity*, verify the criticality test fires
+only on **deliberately-declared** criticality — never on a fail-closed default. Worked example
+(HA config-write NEW-1, `_isDeliberateCritical`, commit 11f1d73): the prior-body deny fires only on
+(a) the `critical_entities` list (exact + glob), (b) a `per_entity_overrides` `tier:C`, or (c) a
+`domain_defaults` value `C` (e.g. `lock.*`, `alarm_control_panel.*`) — and **not** on a
+**fail-closed-unknown Tier-C** entity (a domain absent from `domain_defaults` that `classifyEntity`
+floors to C: `sensor.*`, `input_number.*`, `binary_sensor.*`, …). The asymmetry is the correct
+posture: a fail-closed default is a *labeling/surfacing* conservatism for the human confirm, NOT a
+reviewed safety declaration — so **surface** unknown-C in the confirm label, but do **not** let it
+trigger the interlock-protection deny. Conflating the two makes a passive, freely-replaceable object
+(a battery-SoH calculator that only reads `sensor.*`/`input_number.*`) permanently un-replaceable
+(un-deletable / un-overwritable) while protecting nothing. Also require: the Critical floor is
+evaluated **before** any A/B override (cannot be downgraded — M7), and a per-entity A/B override on a
+domain-default-C entity correctly drops it. This narrowing is load-bearing-coupled to the
+cause-to-fire invariant below — it is safe ONLY while every actuating position is scanned-or-hard-
+denied (a read-only Critical ref in a Jinja `value:` cannot actuate, so it neuters nothing); any
+scanner relaxation that lets actuation hide in an unscanned position voids it and must be re-audited,
+and the conservative `hard_deny` branch is the retained residual. (cf. "*Surface-but-don't-deny is
+only safe for a provably read-only entity type*" — that governs when never-denying is safe at all;
+this governs which *prior* references should trigger the deny once you do deny.)
+
+### Force-disabled deploy models: audit cause-to-fire, not enable
+A "draft-disabled, human-activates" deploy model rests entirely on the fleet being unable to make a
+drafted automation/script's actions execute. When auditing one, **reject an "enable-only" deny as
+incomplete** — the real invariant is **cause-to-fire**, because service paths exist that fire/run a
+*disabled* object without ever enabling it (in HA: `automation.trigger` runs a disabled automation's
+actions — `skip_condition` defaults true; `script.toggle` starts a stopped script — the two killers
+an "enable" framing misses). Require three things:
+1. **Exhaustive direct-deny set**, enforced at BOTH the service-call and config-write executors AND
+   in-body. Worked example (HA `fleet_enable_deny`, 7 forms): the two killers + `automation.turn_on|
+   toggle`, `script.turn_on`, named-script `script.<object_id>`, and `homeassistant.turn_on|toggle`
+   resolving to `automation.*`/`script.*`. In-body matters: a drafted body that itself calls
+   `automation.trigger`/`script.turn_on`/`script.<object_id>` drafts an *enabler* — the recursive
+   body-scan must hard-deny it, distinct from the direct requested-service check.
+2. **Structural floor.** Force-disable on every upsert (HA: `initial_state:false` force-injected,
+   create and update, + post-write verify→`turn_off`) so no draft fires at deploy; and **no raw
+   firing primitive on the executor** — no event-fire verb (`POST /api/events/*` trips a pre-existing
+   `platform:event` automation, sidestepping the whole enumeration and the body-scan), no
+   MQTT-publish, no Supervisor/add-on path, and the one-shot WS client command-type-scoped to NEVER
+   `call_service`.
+3. **Named residual vectors** that enumeration does NOT close, confirmed contained by the
+   human-enable boundary rather than silently claimed-covered: scene-encoded enable (a pre-existing
+   Tier-A scene flipping `automation.x:on`), transitive call-graph (a drafted automation calling a
+   pre-existing Critical-touching script), blueprint-hidden bodies (actions in a host-side file the
+   scan can't read → FLAG-not-deny + a "review the blueprint in HA before enabling" banner).
+Standing test: any new executor verb or scanner relaxation that could *indirectly* trip an
+already-enabled automation requires FRESH review — the "no out-of-band trigger path" property is
+invisible unless explicitly stated, and it is the whole reason force-disable suffices. (cf.
+"*Resolved-indirection must bind to the Critical-checked identity*" — that closes a TOCTOU identity
+gap on a single mutation; this closes the *enumeration* gap on every path that can cause execution.)
+
 ## Decisions
 
 - **2026-06-09 — Audit heuristics consolidated from the Q-HA-WHITELIST gate review**
@@ -121,6 +174,15 @@ platform.
   (3) executor slugify must match HA. Requested by PM after a `consider-consolidation`
   flag across the multi-round W7 re-reviews; independently audited by `/arch` (APPROVE,
   since `/review` is both requester and canonical reviewer of its own GUIDELINES).
+
+- **2026-06-13 — Two cause-to-fire / interlock-protection invariants consolidated from the battery
+  SoH config-write session** (the `sensor.battery_state_of_health` AGM SoH calculator deploy through
+  the Q-HA-CONFIGWRITE gate; executor fix commit 11f1d73). Source of the two Conventions added above:
+  (1) interlock-protection gates on deliberately-declared criticality (`_isDeliberateCritical`), not a
+  fail-closed default; (2) force-disabled deploy models must be audited for cause-to-fire, not enable.
+  Requested by PM after a `consider-consolidation` flag; independently audited by `/arch` (APPROVE —
+  claims verified against `doc/design/ha_config_write.md`, no contradiction, durable), since `/review`
+  is both requester and canonical reviewer of its own GUIDELINES.
 
 ## Open Questions
 
