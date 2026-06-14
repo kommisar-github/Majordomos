@@ -75,6 +75,15 @@
     "no_fork": true,
     "launcher": "host/launch-ha-devops.sh"
   },
+  "hw_lib": {
+    "capabilities": [
+      "hardware-knowledge",
+      "sot-curation",
+      "doc-updates"
+    ],
+    "role": "specialist",
+    "model": "claude-sonnet-4-6"
+  },
   "swarm": {
     "capabilities": ["federation-bridge", "swarm-pm"],
     "role": "federated-pm",

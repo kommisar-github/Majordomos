@@ -33,6 +33,7 @@ This index lists every rule file in the project, what domain it covers, which gl
 | /ha | `.claude/rules/ha.md` | Home Assistant bidirectional bridge |
 | /ops | `.claude/rules/ops.md` | Federation, launchd, Tailscale, secrets |
 | /ha_devops | `.claude/rules/ha_devops.md` | HA config-write runtime deployer (Mode-4-only, never fork) |
+| /hw_lib | `.claude/rules/hw_lib.md` | SoT hardware-library curator — catalog of per-platform hardware books |
 | /swarm | `.claude/rules/swarm.md` | Federation bridge → remote swarm PM (federated-pm, offline) |
 | /dragon-vlm | `.claude/rules/dragon-vlm.md` | Federation bridge → remote dragon-vlm PM (federated-pm, offline) |
 | /jetson-protect | `.claude/rules/jetson-protect.md` | Federation bridge → remote jetson-protect PM (federated-pm, offline) |

@@ -68,7 +68,14 @@
 | `swarm_GUIDELINES.md` | reference | `/swarm` | `/pm` | SoT-gathered canon about the swarm dev fleet; written via consolidation gate. |
 | `dragon-vlm_GUIDELINES.md` | reference | `/dragon-vlm` | `/pm` | SoT-gathered canon about the dragon-vlm dev fleet; written via consolidation gate. |
 | `jetson-protect_GUIDELINES.md` | reference | `/jetson-protect` | `/pm` | SoT-gathered canon about the jetson-protect dev fleet; written via consolidation gate. |
-| `sot/jetson_orin_baseline.md` | reference | `/pm` | all fleet bridges | Cross-fleet NVIDIA Jetson Orin SoT synthesis; PM-owned, sourced from the per-fleet GUIDELINES Jetson sections. |
+| `hw_lib_GUIDELINES.md` | reference | `/hw_lib` | `/pm` | Hardware Library catalog: index of per-platform hardware books + cross-platform laws. The doc the `hw_lib` federation grant serves. |
+| `hw_lib/jetson_orin.md` | reference | `/hw_lib` | `/pm` | Book 1: NVIDIA Jetson Orin Nano 8GB platform SoT (sm_87, JetPack/L4T R36, 8GB unified-mem, CUDA-≠-desktop law). Written. |
+| `hw_lib/realsense_d435.md` | reference | `/hw_lib` | `/pm` | Book: Intel RealSense D435 depth camera (USB3 8086:0b07). Stub — populate via hw_lib gate. |
+| `hw_lib/orbbec_astra.md` | reference | `/hw_lib` | `/pm` | Book: Orbbec Astra Pro Plus depth camera (2bc5:050f/060f). Stub — populate via hw_lib gate. |
+| `hw_lib/rplidar_a1.md` | reference | `/hw_lib` | `/pm` | Book: RPLidar A1 lidar (CP210x 10c4:ea60). Stub — populate via hw_lib gate. |
+| `hw_lib/esp32.md` | reference | `/hw_lib` | `/pm` | Book: ESP32 / ESP32-S3 MCU/SoC (CDC-ACM 0416:b002). Stub — populate via hw_lib gate. |
+| `hw_lib/stm32.md` | reference | `/hw_lib` | `/pm` | Book: STM32 (F103) MCU (CH340 1a86:7523). Stub — populate via hw_lib gate. |
+| `hw_lib/imu_mpu.md` | reference | `/hw_lib` | `/pm` | Book: MPU-6050 / MPU-9250 IMU (I2C bus7 0x68). Stub — populate via hw_lib gate. |
 
 ---
 
