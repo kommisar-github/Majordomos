@@ -1,7 +1,7 @@
 # PM_TEMPLATES.md — Copy-Paste Templates
 
 **Companion to:** `PM.md` (concepts, setup guide, and architecture assessment)
-**Version:** 4.13 (2026-06-12)
+**Version:** 4.16 (2026-06-14)
 
 Each section below is a complete file template. Copy the indented content
 (removing the 4-space leading indent) to the path shown in the **Save as** line.
@@ -806,28 +806,37 @@ Copy everything below (including the `---` YAML markers) into `.claude/skills/pm
 
     See `doc/seed/AGENT_PROTOCOL.md` for the wire protocol underneath.
 
-    ### PM-to-PM (Majordomus) Dispatch
+    ### PM-to-PM (Federation) Dispatch
 
-    For cross-machine PM-of-PMs orchestration, dispatch to a remote PM
-    through a **remote-agent registration** — the existing federation path
-    in `mcp-task-router/src/federation.js` carries the request to the peer:
+    For cross-machine PM-of-PMs orchestration, register a remote fleet's PM as a
+    **federated agent**, then `dispatch_task` to it like any local agent — the
+    forward goes through the **gated** federation path (the remote PM is a real
+    second gate that can decline / re-scope), and the result mirrors back into your
+    local task:
 
-    1. `register_agent` with a `remote: { url, project, target_agent, api_key_env }`
-       block — see `doc/runbooks/MAJORDOMUS_RUNBOOK.md` for the schema.
-    2. Standard `dispatch_task(to=<remote-name>, payload=…)` from your local
-       PM. Federation forwards via `POST /api/dispatch?project=<remote_project>`
-       on the peer.
-    3. The remote PM completes the task normally; `wait_for_result`
-       long-polls the result back into your local task record.
+    1. `register_agent` with a gated `remote` block:
+       `remote: { url, project, target_agent, operation, token_env }`
+       - `token_env` names the env var holding a `trtok_` grant the remote minted
+         for you (store the raw token in a gitignored file; commit only the var name).
+       - `target_agent` defaults to `pm` (a FLEET grant — the whole remote roster),
+         `operation` to `execute` (RWE). See `doc/runbooks/FEDERATION_RUNBOOK.md`.
+    2. Standard `dispatch_task(to=<remote-name>, payload=…)`. The server forwards via
+       `POST /api/federation/request` on the peer → the remote PM reviews and acts →
+       `POST /api/federation/wait` long-polls the PM's result back.
+    3. The federated agent shows as `status: "federated"` in `list_agents` with a
+       `last_reachable_at` derived from the last successful call (no local terminal).
 
-    The remote peer must have `TASK_ROUTER_API_KEY` set, and your local
-    `register_agent.remote.api_key_env` must name an env var holding the
-    matching key. Local multi-project routing does **not** need this — the
-    `?project=` URL parameter alone is enough.
+    The remote peer needs no global key for this path — the `trtok_` grant authorizes
+    the call and the remote PM gates it. Local multi-project routing does **not** need
+    any of this; the `?project=` URL parameter alone is enough.
+
+    > **Legacy (ungated):** a `remote` block with `api_key_env` instead of `token_env`
+    > still forwards via the old `POST /api/dispatch` (direct to the remote agent,
+    > global-key auth, no PM gate). Prefer the gated `token_env` path for new setups.
 
     ### Remote Federation — authorized inter-PM access (v0.9.0)
 
-    Beyond Majordomus dispatch, a project owner can grant your PM **scoped,
+    Beyond federation dispatch, a project owner can grant your PM **scoped,
     per-agent** access to a remote project using an opaque token they issue
     (`grant_access` / `task-router grant-access`). They share the `trtok_…`
     token out-of-band; you store it in an env var (never inline it in a
@@ -1245,7 +1254,7 @@ Copy everything below (including the `---` YAML markers) into `.claude/skills/pm
 
     Read-only diagnostic. **No fixes are applied automatically.** Default
     scope is local agents only — `/pm audit remote` is reserved for a
-    future Majordomus-side rollout and prints "not yet wired" today.
+    future federation-side rollout and prints "not yet wired" today.
 
     ### Phase 1 — Dispatch the audit directive
 
@@ -1305,8 +1314,25 @@ Copy everything below (including the `---` YAML markers) into `.claude/skills/pm
        wrap them (re-run `init.sh` from the latest seed, or apply the relevant hook
        erratum). These hooks are what drive server start, memory autoload, and the
        yellow→green lifecycle — a missing `Stop` hook leaves agents stuck "starting".
-    9. Writes `doc/audit/YYYY-MM-DD-audit.md` with the findings table.
-    10. Prints a one-screen summary table to the user.
+    9. **Seed-compliance verdict (authoritative)** — `GET
+       http://127.0.0.1:$PORT/api/seed/compliance?project=<name>` returns the
+       server's deterministic verdict (seed anchor · full hook set · seed_version-vs-
+       PM_TEMPLATES match). This is the SOURCE OF TRUTH for those three signals —
+       prefer it over eyeballing the files (checks 7–8 remain for the malformed-hook-
+       envelope and client-protocol cases the verdict doesn't cover). If `verdict` is
+       `RE-SEED REQUIRED`, do NOT merely log it — **auto-offer a re-seed, with a defer
+       option**: show the returned `issues[]` and ask the user to choose —
+       - **Re-seed now** — guide them to run **"Task Router: Re-seed Project"**
+         (Ctrl+Shift+P) or `upgrade.{sh,ps1} --reseed "<project>"`, then restart the
+         server and relaunch agents. PM does NOT run the re-seed itself — it would
+         rewrite its own hooks / PM_TEMPLATES mid-session; the operator runs it
+         out-of-band.
+       - **Defer** — `save_memory` a `seed_reseed_deferred` note and re-surface this
+         offer on the next `/pm audit`; never silently drop it.
+       If `known` is `false` (no recorded project root) or the server is unreachable,
+       fall back to the offline `upgrade.{sh,ps1} --check-compliance "<project>"`.
+    10. Writes `doc/audit/YYYY-MM-DD-audit.md` with the findings table.
+    11. Prints a one-screen summary table to the user.
 
     The PM brings findings back to the user before acting on them. Audits
     are diagnostic only — never auto-modify agent state.

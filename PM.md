@@ -2,7 +2,7 @@
 
 **Purpose:** Project-agnostic PM agent template. Copy into a new project and customize.
 **Creates:** `.claude/skills/pm/SKILL.md` + `.claude/rules/project.md` + `.claude/SKILLS.md` + `.claude/rules/INDEX.md` + MCP task router
-**Version:** 4.13 (2026-06-12)
+**Version:** 4.16 (2026-06-14)
 **Templates:** All copy-paste templates are in **`PM_TEMPLATES.md`** (companion file).
 
 ---
