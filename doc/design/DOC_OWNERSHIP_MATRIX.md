@@ -68,6 +68,7 @@
 | `swarm_GUIDELINES.md` | reference | `/swarm` | `/pm` | SoT-gathered canon about the swarm dev fleet; written via consolidation gate. |
 | `dragon-vlm_GUIDELINES.md` | reference | `/dragon-vlm` | `/pm` | SoT-gathered canon about the dragon-vlm dev fleet; written via consolidation gate. |
 | `jetson-protect_GUIDELINES.md` | reference | `/jetson-protect` | `/pm` | SoT-gathered canon about the jetson-protect dev fleet; written via consolidation gate. |
+| `sot/jetson_orin_baseline.md` | reference | `/pm` | all fleet bridges | Cross-fleet NVIDIA Jetson Orin SoT synthesis; PM-owned, sourced from the per-fleet GUIDELINES Jetson sections. |
 
 ---
 
