@@ -1,5 +1,5 @@
 ---
-description: Federation bridge to the dragon-vlm dev fleet's remote PM (192.168.1.111:3100, project=dragon-vlm)
+description: Federation bridge to the dragon-vlm dev fleet's remote PM (192.168.1.131:3100, project=dragon-vlm)
 globs: doc/dragon-vlm_GUIDELINES.md
 alwaysApply: false
 ---
@@ -11,7 +11,7 @@ alwaysApply: false
   Appears **offline** in the dashboard by design (no launcher/terminal). dragon-vlm's PM is the
   **second gate** — relay its decline/re-scope verbatim, never fake execution.
 - **The bridge call** (source secrets first): `set -a; . fleet/fleet.secrets.env; set +a` then
-  `node .claude/mcp/task-router/client.js remote-execute --url=http://192.168.1.111:3100
+  `node .claude/mcp/task-router/client.js remote-execute --url=http://192.168.1.131:3100
   --project=dragon-vlm --agent=pm --token-env=FED_TOK_DRAGON_VLM --payload='<req>'`. **Bare**
   token-env name (no `env:` prefix). Read-only → `remote-read-guidelines` / `remote-list-agents`.
 - **Target metadata is descriptive only** — v4.13's client does NOT parse `fleet.config.json`

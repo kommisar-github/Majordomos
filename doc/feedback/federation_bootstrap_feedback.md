@@ -90,7 +90,7 @@
 ## Numbers from this bootstrap round
 
 - **Session type:** Federation + SoT enterprise identity bootstrap (not a seed bootstrap round — fleet was already seeded).
-- **Fleets wired:** 3 consumer fleets → 1 SoT, all on 1 shared multi-tenant server (LAN, `http://192.168.1.111:3100`).
+- **Fleets wired:** 3 consumer fleets → 1 SoT, all on 1 shared multi-tenant server (LAN, `http://192.168.1.131:3100`).
 - **Agent roster (`agents.json`):** 8 total — 3 coordinators (pm, arch, review) + 5 specialists (scm, app, ha, ops, ha_devops). Custom roster, not the default 4-agent seed.
 - **Docs produced this session:** 4 new files (doc/design/federation.md rewrite, doc/federation.md, doc/feedback/federation_bootstrap_feedback.md, fleet/fleet.config.json) + 2 created non-doc files (fleet.json, .env) + 1 doc updated (DOC_OWNERSHIP_MATRIX.md — 3 rows added).
 - **Connectivity verification calls:** 6 total (3 × title-case → 404; 3 × lowercase → 200 OK + roster). Round-trips per fleet: 2.
@@ -112,7 +112,7 @@ This is the exact SKILL.md we ship for each federated fleet PM (one per fleet; t
 ```markdown
 ---
 name: swarm
-description: "Federation bridge to the swarm dev fleet's PM (remote, 192.168.1.111:3100). Use to delegate a request into swarm's PM via the federation gate and to hold SoT-gathered canon about the swarm fleet."
+description: "Federation bridge to the swarm dev fleet's PM (remote, 192.168.1.131:3100). Use to delegate a request into swarm's PM via the federation gate and to hold SoT-gathered canon about the swarm fleet."
 disable-model-invocation: false
 ---
 
@@ -124,7 +124,7 @@ remote PM** and relay its result back, and you own the SoT's durable knowledge *
 the swarm fleet.
 
 ## Federation target (descriptive — see Key Facts on what consumes it)
-- **Remote URL:** `http://192.168.1.111:3100`  (host may change; source of truth is `fleet/fleet.config.json` → `name:"Swarm"`)
+- **Remote URL:** `http://192.168.1.131:3100`  (host may change; source of truth is `fleet/fleet.config.json` → `name:"Swarm"`)
 - **Remote project slug:** `swarm`  (lowercase, case-sensitive — title case → HTTP 404 `project_not_registered`)
 - **Remote agent:** `pm`  (every federated request lands on swarm's PM — the **second gate**)
 - **Grant:** `pm` (level **RWE** server-side; query with `remote-list-agents`)
@@ -151,7 +151,7 @@ Source the secrets, then `remote-execute` into swarm's PM:
 ```
 set -a; . fleet/fleet.secrets.env; set +a
 node .claude/mcp/task-router/client.js remote-execute \
-  --url=http://192.168.1.111:3100 --project=swarm --agent=pm \
+  --url=http://192.168.1.131:3100 --project=swarm --agent=pm \
   --token-env=FED_TOK_SWARM --payload='<the request to swarm PM>'
 ```
 - Pass the **bare** env-var name (`--token-env=FED_TOK_SWARM`); never the `env:` prefix.

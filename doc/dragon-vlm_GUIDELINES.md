@@ -12,7 +12,7 @@ what dragon-vlm does, dragon-vlm conventions, SoT knowledge about dragon-vlm.
 
 **Key facts:**
 - `/dragon-vlm` is a **federation bridge**, not a local build specialist — it relays into
-  dragon-vlm's remote PM (`http://192.168.1.111:3100`, project `dragon-vlm`, token-env `FED_TOK_DRAGON_VLM`).
+  dragon-vlm's remote PM (`http://192.168.1.131:3100`, project `dragon-vlm`, token-env `FED_TOK_DRAGON_VLM`).
 - This file is the agent's ONLY sanctioned durable write target, and only through the
   PM→`/review` consolidation gate.
 - Never record a federation token or `confirm_id` value here — they are credentials/secrets.

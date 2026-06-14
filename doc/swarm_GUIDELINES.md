@@ -12,7 +12,7 @@ swarm conventions, SoT knowledge about swarm.
 
 **Key facts:**
 - `/swarm` is a **federation bridge**, not a local build specialist — it relays into swarm's
-  remote PM (`http://192.168.1.111:3100`, project `swarm`, token-env `FED_TOK_SWARM`).
+  remote PM (`http://192.168.1.131:3100`, project `swarm`, token-env `FED_TOK_SWARM`).
 - This file is the agent's ONLY sanctioned durable write target, and only through the
   PM→`/review` consolidation gate.
 - Never record a federation token or `confirm_id` value here — they are credentials/secrets.

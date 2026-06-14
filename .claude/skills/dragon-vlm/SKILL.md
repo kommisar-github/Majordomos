@@ -1,6 +1,6 @@
 ---
 name: dragon-vlm
-description: "Federation bridge to the dragon-vlm dev fleet's PM (remote, 192.168.1.111:3100). Use to delegate a request into dragon-vlm's PM via the federation gate and to hold SoT-gathered canon about the dragon-vlm fleet."
+description: "Federation bridge to the dragon-vlm dev fleet's PM (remote, 192.168.1.131:3100). Use to delegate a request into dragon-vlm's PM via the federation gate and to hold SoT-gathered canon about the dragon-vlm fleet."
 disable-model-invocation: false
 ---
 
@@ -12,7 +12,7 @@ remote PM** and relay its result back, and you own the SoT's durable knowledge *
 the dragon-vlm fleet.
 
 ## Federation target (descriptive — see Key Facts on what consumes it)
-- **Remote URL:** `http://192.168.1.111:3100`  (host may change; source of truth is `fleet/fleet.config.json` → `name:"Dragon-VLM"`)
+- **Remote URL:** `http://192.168.1.131:3100`  (host may change; source of truth is `fleet/fleet.config.json` → `name:"Dragon-VLM"`)
 - **Remote project slug:** `dragon-vlm`  (lowercase, case-sensitive — title case → HTTP 404 `project_not_registered`)
 - **Remote agent:** `pm`  (every federated request lands on dragon-vlm's PM — the **second gate**)
 - **Grant:** `pm` (level **RWE** server-side; query with `remote-list-agents`)
@@ -39,7 +39,7 @@ Source the secrets, then `remote-execute` into dragon-vlm's PM:
 ```
 set -a; . fleet/fleet.secrets.env; set +a
 node .claude/mcp/task-router/client.js remote-execute \
-  --url=http://192.168.1.111:3100 --project=dragon-vlm --agent=pm \
+  --url=http://192.168.1.131:3100 --project=dragon-vlm --agent=pm \
   --token-env=FED_TOK_DRAGON_VLM --payload='<the request to dragon-vlm PM>'
 ```
 - Pass the **bare** env-var name (`--token-env=FED_TOK_DRAGON_VLM`); never the `env:` prefix.

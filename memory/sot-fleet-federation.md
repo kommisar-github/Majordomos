@@ -1,6 +1,6 @@
 ---
 name: sot-fleet-federation
-description: Majordomus is the home SoT, federated to 3 dev fleets (swarm/dragon-vlm/jetson-protect) on 192.168.1.111:3100; wiring, gotchas, rotation-pending
+description: Majordomus is the home SoT, federated to 3 dev fleets (swarm/dragon-vlm/jetson-protect) on 192.168.1.131:3100; wiring, gotchas, rotation-pending
 metadata:
   type: project
 ---
@@ -11,7 +11,7 @@ ENTERPRISE_GUIDEBOOK §7). The guidebook lives locally at
 `~/Work/claude-task-router-releases/ENTERPRISE_GUIDEBOOK.md` (OneDrive-synced; the operator's
 `D:\…` path is the Windows mirror).
 
-**The 3 fleets — all one multi-tenant Task Router at `http://192.168.1.111:3100`** (routed by
+**The 3 fleets — all one multi-tenant Task Router at `http://192.168.1.131:3100`** (routed by
 `?project=`; host may change per-fleet later). Registry: `fleet/fleet.config.json`
 (committed, `{name, url, grant, project, tokenRef}`, tokenRef = env-var name ONLY — no raw
 tokens; verify `grep -i trtok fleet/fleet.config.json` is empty):
@@ -29,7 +29,7 @@ tokens; verify `grep -i trtok fleet/fleet.config.json` is empty):
 `*secret*` + `*.env`; NEVER commit, NEVER put in a dispatch payload). Source before client
 calls: `set -a; . fleet/fleet.secrets.env; set +a`. Operationally: `node
 .claude/mcp/task-router/client.js remote-{list-agents,read-guidelines,write-guidelines,execute}
---url=http://192.168.1.111:3100 --project=<lower> --token-env=FED_TOK_<NAME>`.
+--url=http://192.168.1.131:3100 --project=<lower> --token-env=FED_TOK_<NAME>`.
 **Operator declined token rotation** (private LAN; tokens stay). Raw tokens stay out of git
 regardless — committing them was explicitly NOT done.
 

@@ -12,7 +12,7 @@ jetson-protect canon, what jetson-protect does, jetson-protect conventions, SoT 
 
 **Key facts:**
 - `/jetson-protect` is a **federation bridge**, not a local build specialist — it relays into
-  jetson-protect's remote PM (`http://192.168.1.111:3100`, project `jetson-protect`, token-env `FED_TOK_JETSON_PROTECT`).
+  jetson-protect's remote PM (`http://192.168.1.131:3100`, project `jetson-protect`, token-env `FED_TOK_JETSON_PROTECT`).
 - This file is the agent's ONLY sanctioned durable write target, and only through the
   PM→`/review` consolidation gate.
 - Never record a federation token or `confirm_id` value here — they are credentials/secrets.

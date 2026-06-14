@@ -24,7 +24,7 @@ Top-level shape: `{ "fleets": [ <entry>, … ] }`. Each entry:
 | Field | Required | Meaning |
 |---|---|---|
 | `name` | yes | Display name (e.g. `Swarm`). Cosmetic — never sent to the server. |
-| `url` | yes | Remote Task Router base URL (e.g. `http://192.168.1.111:3100`). |
+| `url` | yes | Remote Task Router base URL (e.g. `http://192.168.1.131:3100`). |
 | `project` | yes | Server project slug — **lowercase, case-sensitive** (`swarm`, not `Swarm`); title case → HTTP 404 `project_not_registered`. |
 | `grant` | yes | The **local grantee agent** the token authenticates as — `"pm"`. NOT an access level. |
 | `tokenRef` | yes | **Human pointer** to the env var holding the raw token, written `"env:FED_TOK_<NAME>"`. |

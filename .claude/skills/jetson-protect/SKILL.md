@@ -1,6 +1,6 @@
 ---
 name: jetson-protect
-description: "Federation bridge to the jetson-protect dev fleet's PM (remote, 192.168.1.111:3100). Use to delegate a request into jetson-protect's PM via the federation gate and to hold SoT-gathered canon about the jetson-protect fleet."
+description: "Federation bridge to the jetson-protect dev fleet's PM (remote, 192.168.1.131:3100). Use to delegate a request into jetson-protect's PM via the federation gate and to hold SoT-gathered canon about the jetson-protect fleet."
 disable-model-invocation: false
 ---
 
@@ -12,7 +12,7 @@ remote PM** and relay its result back, and you own the SoT's durable knowledge *
 the jetson-protect fleet.
 
 ## Federation target (descriptive — see Key Facts on what consumes it)
-- **Remote URL:** `http://192.168.1.111:3100`  (host may change; source of truth is `fleet/fleet.config.json` → `name:"Jetson-Protect"`)
+- **Remote URL:** `http://192.168.1.131:3100`  (host may change; source of truth is `fleet/fleet.config.json` → `name:"Jetson-Protect"`)
 - **Remote project slug:** `jetson-protect`  (lowercase, case-sensitive — title case → HTTP 404 `project_not_registered`)
 - **Remote agent:** `pm`  (every federated request lands on jetson-protect's PM — the **second gate**)
 - **Grant:** `pm` (level **RWE** server-side; query with `remote-list-agents`)
@@ -39,7 +39,7 @@ Source the secrets, then `remote-execute` into jetson-protect's PM:
 ```
 set -a; . fleet/fleet.secrets.env; set +a
 node .claude/mcp/task-router/client.js remote-execute \
-  --url=http://192.168.1.111:3100 --project=jetson-protect --agent=pm \
+  --url=http://192.168.1.131:3100 --project=jetson-protect --agent=pm \
   --token-env=FED_TOK_JETSON_PROTECT --payload='<the request to jetson-protect PM>'
 ```
 - Pass the **bare** env-var name (`--token-env=FED_TOK_JETSON_PROTECT`); never the `env:` prefix.

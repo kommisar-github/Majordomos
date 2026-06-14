@@ -15,7 +15,7 @@ Canonical project facts (architecture, decisions, failure modes) belong in
 - [Majordomus daemon naming](majordomus-daemon-naming.md) — host package renamed mcp-task-router-app → majordomus-daemon (2026-06-11, e7b9a2f); launch + what the daemon bundles
 - [Battery SoH config-write](battery-soh-config-write.md) — AGM SoH calculator (Pass 2) deployed via gated config-write; operator HA-UI enable steps, executor lessons (object_id=numeric-not-slug, NEW-1 _isDeliberateCritical), Pass-2 audit-gap verdict (executeConfigWrite never called — process gap); remediation #1-#3 done (c2bc62c), #4 smoke test pending :3101 daemon start; KEY: :3101 has NO GET /health route — use empty-body POST reachability probe
 
-- [SoT fleet federation](sot-fleet-federation.md) — Majordomus = home SoT federated to 3 dev fleets (swarm/dragon-vlm/jetson-protect) on 192.168.1.111:3100; lowercase case-sensitive project ids, RWE pm grants, tokens in gitignored fleet.secrets.env (rotation pending), full SoT bootstrap deferred
+- [SoT fleet federation](sot-fleet-federation.md) — Majordomus = home SoT federated to 3 dev fleets (swarm/dragon-vlm/jetson-protect) on 192.168.1.131:3100; lowercase case-sensitive project ids, RWE pm grants, tokens in gitignored fleet.secrets.env (rotation pending), full SoT bootstrap deferred
 
 ## Update protocol
 

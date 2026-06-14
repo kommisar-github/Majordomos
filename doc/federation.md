@@ -80,7 +80,7 @@ Expected: `{"ok":true,"result":{"project":"<id>","agents":{"pm":"<level>"}}}`.
 
 ## 5. Multi-tenant notes
 
-When multiple fleets share one Task Router URL (e.g. `http://192.168.1.111:3100`):
+When multiple fleets share one Task Router URL (e.g. `http://192.168.1.131:3100`):
 - Disambiguate via the `project` field — routed as `?project=<id>` on each API call.
 - Each fleet's token is scoped to its own project — a Swarm token cannot read Dragon-VLM data.
 - `curl -s <url>/health` returns `"tenants": N` — sanity-check N matches expected fleet count.

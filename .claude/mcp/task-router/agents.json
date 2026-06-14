@@ -78,16 +78,16 @@
   "swarm": {
     "capabilities": ["federation-bridge", "swarm-pm"],
     "role": "federated-pm",
-    "remote": { "url": "http://192.168.1.111:3100", "project": "swarm", "agent": "pm", "grant": "pm", "tokenRef": "env:FED_TOK_SWARM" }
+    "remote": { "url": "http://192.168.1.131:3100", "project": "swarm", "agent": "pm", "grant": "pm", "tokenRef": "env:FED_TOK_SWARM" }
   },
   "dragon-vlm": {
     "capabilities": ["federation-bridge", "dragon-vlm-pm"],
     "role": "federated-pm",
-    "remote": { "url": "http://192.168.1.111:3100", "project": "dragon-vlm", "agent": "pm", "grant": "pm", "tokenRef": "env:FED_TOK_DRAGON_VLM" }
+    "remote": { "url": "http://192.168.1.131:3100", "project": "dragon-vlm", "agent": "pm", "grant": "pm", "tokenRef": "env:FED_TOK_DRAGON_VLM" }
   },
   "jetson-protect": {
     "capabilities": ["federation-bridge", "jetson-protect-pm"],
     "role": "federated-pm",
-    "remote": { "url": "http://192.168.1.111:3100", "project": "jetson-protect", "agent": "pm", "grant": "pm", "tokenRef": "env:FED_TOK_JETSON_PROTECT" }
+    "remote": { "url": "http://192.168.1.131:3100", "project": "jetson-protect", "agent": "pm", "grant": "pm", "tokenRef": "env:FED_TOK_JETSON_PROTECT" }
   }
 }
