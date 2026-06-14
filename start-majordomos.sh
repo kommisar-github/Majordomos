@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# launcher-rev: 4   (bump when this template changes; the IDE auto-refreshes a project's
+# launcher-rev: 5   (bump when this template changes; the IDE auto-refreshes a project's
 #                    launchers when the bundled rev is higher — seedSync.ts. Absent = rev 0.)
 # start-Majordomos — launch the headless Task Router host for this project,
 # using the app bundled inside your installed Task Router extension. No per-project
@@ -21,6 +21,11 @@
 #   ./start-Majordomos.sh --inhouse     default to in-house (this is the default).
 #   ./start-Majordomos.sh --detached    default to detached (alias: --observe).
 #                                             Either way you can pick the other per agent.
+# Take over a dashboard already running on this UI port (instead of an EADDRINUSE error):
+#   ./start-Majordomos.sh --restart-app
+# Start / restart the Telegram bridge with the App (headless parity with the IDE):
+#   ./start-Majordomos.sh --bridge          (or TASK_ROUTER_BRIDGE=1 ./start-Majordomos.sh)
+#   ./start-Majordomos.sh --restart-bridge  (stop a running bridge, start fresh)
 # Remote access (default is local-only): bind the server / dashboard to a LAN IP
 # or 0.0.0.0. The server's remote surface is /api/federation/* (grant tokens) +
 # /health only; the dashboard (UI_HOST) has NO auth, so trusted networks only:

@@ -124,4 +124,4 @@ if [ -n "${TASK_ROUTER_MODEL:-}" ]; then
   MODEL_ARGS=(--model "${TASK_ROUTER_MODEL}")
 fi
 
-claude "${MODEL_ARGS[@]}" --dangerously-skip-permissions --agent ha_devops_agent "/ha_devops" "$@"
+claude ${MODEL_ARGS[@]+"${MODEL_ARGS[@]}"} --dangerously-skip-permissions --agent ha_devops_agent "/ha_devops" ${@+"$@"}
