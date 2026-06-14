@@ -64,6 +64,10 @@
 | `runbooks/ha_deploy.md` | reference | `/ha_devops` | `/ha`, `/ops`, `/pm` | Operator runbook: launch `ha_devops`, deploy flow, enable-by-hand step, undo, W5 bring-up + W7 e2e. |
 | `design/federation.md` | design | `/ops` | `/pm` | Inter-PM federation client wiring + `fleet/fleet.config.json` registry schema (descriptive metadata; client resolves tokens via `--token-env`, not this file). |
 | `federation.md` | reference | `/ops` | `/pm` | Operator runbook: add a fleet, source `fleet.secrets.env`, connectivity check, grant management, multi-tenant `/health` notes. |
+| `feedback/federation_bootstrap_feedback.md` | reference | `/ops` | `/pm` | First-fleet federation + SoT bootstrap feedback for Task Router maintainer (v4.13, 6 verified gaps + proposed fixes). |
+| `swarm_GUIDELINES.md` | reference | `/swarm` | `/pm` | SoT-gathered canon about the swarm dev fleet; written via consolidation gate. |
+| `dragon-vlm_GUIDELINES.md` | reference | `/dragon-vlm` | `/pm` | SoT-gathered canon about the dragon-vlm dev fleet; written via consolidation gate. |
+| `jetson-protect_GUIDELINES.md` | reference | `/jetson-protect` | `/pm` | SoT-gathered canon about the jetson-protect dev fleet; written via consolidation gate. |
 
 ---
 

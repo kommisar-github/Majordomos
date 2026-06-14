@@ -1277,8 +1277,16 @@ Other agents: start with 1-2 specialists, let PM propose more as complexity grow
 | /scm | Git commits, branches, push, PRs | .claude/skills/scm/SKILL.md | *(none)* |
 | /arch | Phase design, system architecture | .claude/skills/arch/SKILL.md | *(none)* |
 | /review | Architecture audit, challenge decisions | .claude/skills/review/SKILL.md | *(none)* |
+| /app | node-pty supervisor + in-process server host | .claude/skills/app/SKILL.md | app.md |
+| /ha | Home Assistant bidirectional bridge + safety gate | .claude/skills/ha/SKILL.md | ha.md |
+| /ops | Federation wiring, launchd, Tailscale, secrets | .claude/skills/ops/SKILL.md | ops.md |
+| /ha_devops | HA config-write deployer (Mode-4-only, never fork) | .claude/skills/ha_devops/SKILL.md | ha_devops.md |
+| /swarm | Federation bridge → remote swarm PM (federated-pm, offline) | .claude/skills/swarm/SKILL.md | swarm.md |
+| /dragon-vlm | Federation bridge → remote dragon-vlm PM (federated-pm, offline) | .claude/skills/dragon-vlm/SKILL.md | dragon-vlm.md |
+| /jetson-protect | Federation bridge → remote jetson-protect PM (federated-pm, offline) | .claude/skills/jetson-protect/SKILL.md | jetson-protect.md |
 
-(/scm, /arch, /review are auto-created during bootstrap. PM will add more as agents are created)
+(/scm, /arch, /review are auto-created during bootstrap. /swarm, /dragon-vlm, /jetson-protect are
+federation bridges to remote dev-fleet PMs — they appear offline in the dashboard by design.)
 
 
 

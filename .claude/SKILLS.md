@@ -49,3 +49,6 @@ You can also request: /pm propose an agent for <domain>.
 | ha | `/ha` | `majordomus-daemon/src/ha-bridge.js`, `doc/ha_integration.md` | Home Assistant bidirectional bridge | claude-sonnet-4-6 |
 | ops | `/ops` | `host/**`, `fleet/**`, `doc/{federation,host_ops}.md` | Federation wiring, launchd, Tailscale, secrets | claude-sonnet-4-6 |
 | ha_devops | `/ha_devops` | *(no source)* — `doc/runbooks/ha_deploy.md` | HA config-write runtime deployer — **Mode-4-only, never fork** (`no_fork`) | claude-sonnet-4-6 |
+| swarm | `/swarm` | `doc/swarm_GUIDELINES.md` | **Federation bridge** → remote `swarm` PM (192.168.1.111:3100); holds SoT canon about swarm | *(federated-pm; offline)* |
+| dragon-vlm | `/dragon-vlm` | `doc/dragon-vlm_GUIDELINES.md` | **Federation bridge** → remote `dragon-vlm` PM; holds SoT canon about dragon-vlm | *(federated-pm; offline)* |
+| jetson-protect | `/jetson-protect` | `doc/jetson-protect_GUIDELINES.md` | **Federation bridge** → remote `jetson-protect` PM; holds SoT canon about jetson-protect | *(federated-pm; offline)* |

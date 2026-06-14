@@ -59,9 +59,25 @@ non-loopback (`TASK_ROUTER_HOST=0.0.0.0`/LAN/Tailscale) + open 3100 for `/api/fe
 (owner endpoints + UI stay loopback, G3). /ops recommends Tailscale. Left commented in `.env` — do
 NOT enable without operator sign-off.
 
-**SoT KNOWLEDGE AGENTS — deferred by operator directive (2026-06-14):** define them AFTER gathering
+**FEDERATION-BRIDGE AGENTS created (2026-06-14, agent-per-PM, operator-chosen "structural" approach).**
+`/swarm`, `/dragon-vlm`, `/jetson-protect` — local **bridge** skills (NOT MCP workers) that relay a
+request INTO each fleet's remote PM via `client.js remote-execute` and own that fleet's SoT canon
+(`doc/<name>_GUIDELINES.md`). Each: SKILL.md + rules/<name>.md + GUIDELINES + rows in agents.json
+(role:`federated-pm`, `remote` block, **NO model field** per operator) + SKILLS.md + INDEX.md + matrix
++ PM roster. **Offline in the dashboard by design** (no launcher/terminal; operator accepted). Designed
+to optionally become **online bridge-workers** later (a launched terminal polls PM dispatches → remote-execute)
+without needing the unshipped native remote-registration. **KEY:** v4.13 has NO native federated-agent
+registration (`register_agent` `remote:` block + `MAJORDOMUS_RUNBOOK.md` are referenced in the seed PM
+skill but DON'T ship) — the bridge skill IS the workaround.
+
+**Maintainer feedback filed:** `doc/feedback/federation_bootstrap_feedback.md` (FEEDBACK_TEMPLATE.md
+structure; 6 gaps + proposed fixes, what-worked, what-not-to-change; A3 + Appendix A carry our
+bridge-agent pattern as the proposed native `role:"federated-pm"` design). /ops Primary.
+
+**SoT KNOWLEDGE-TOPIC AGENTS — still deferred by operator directive:** define them AFTER gathering
 common knowledge from the federated projects (read across swarm/dragon-vlm/jetson-protect, find shared
-themes, THEN create the SoT knowledge-topic agents). Don't pre-create them.
+themes, THEN create the SoT knowledge-topic agents). Distinct from the bridge agents above. The gathering
+phase fills each bridge agent's `doc/<name>_GUIDELINES.md`. Next phase once committed.
 
 **Doc consolidation IN PROGRESS.** /ops drafted `doc/design/federation.md` (rewrite) + new
 `doc/federation.md` runbook + 2 matrix rows; /review REVISE'd (killed a tokenRef/grant/`env:`-prefix
