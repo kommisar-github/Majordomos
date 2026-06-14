@@ -1,0 +1,25 @@
+{
+  "fleets": [
+    {
+      "name": "Swarm",
+      "url": "http://192.168.1.111:3100",
+      "project": "swarm",
+      "grant": "pm",
+      "tokenRef": "env:FED_TOK_SWARM"
+    },
+    {
+      "name": "Dragon-VLM",
+      "url": "http://192.168.1.111:3100",
+      "project": "dragon-vlm",
+      "grant": "pm",
+      "tokenRef": "env:FED_TOK_DRAGON_VLM"
+    },
+    {
+      "name": "Jetson-Protect",
+      "url": "http://192.168.1.111:3100",
+      "project": "jetson-protect",
+      "grant": "pm",
+      "tokenRef": "env:FED_TOK_JETSON_PROTECT"
+    }
+  ]
+}

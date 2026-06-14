@@ -1,6 +1,6 @@
 ---
 name: battery-soh-config-write
-description: Battery SoH calculator (AGM) deployed via gated config-write; pending operator HA-UI steps, executor lessons, the Pass-2 audit-gap verdict (executeConfigWrite never called) + #1 retroactive-audit fix
+description: Battery SoH calculator (AGM) deployed via gated config-write; pending operator HA-UI steps, executor lessons, Pass-2 audit-gap verdict, remediation #1-#3 done (c2bc62c), #4 smoke test pending daemon; :3101 has no GET /health route (use reachability probe)
 metadata:
   type: project
 ---
@@ -54,12 +54,28 @@ Honestly labels the gap without implying a gated approval. **Shell pitfall:** ap
 via `python3 -c "…"` corrupts `{%-`→`{` from brace/`%` expansion — write to a `/tmp/*.py`
 file and run that instead.
 
-**Remediation #2–#4 still OPEN, blocked on launching `ha_devops` (no_fork, Mode-4-only,
-offline):** #2 `doc/runbooks/ha_deploy.md` must mandate all config-writes go through
-`executeConfigWrite` (no direct REST); #3 `ha_devops` SKILL must add an executor-liveness
-precheck (`GET :3101/health`⇒200, refuse if down); #4 benign `helper_create` smoke test via
-the executor to confirm an audit entry lands end-to-end. Launch: `bash host/launch-ha-devops.sh`
-+ `node majordomus-daemon/bin/app.js` (if 3101 down). See [[ha-devops-hard-gate]].
+**Remediation #2+#3 DONE (2026-06-14, commit `c2bc62c`, pushed), review-gated.** Hardened
+the audited config-write path across three files: `doc/runbooks/ha_deploy.md` (§4 gated-path
+mandate — ALL config-writes go through `executeConfigWrite`, no direct REST / HA-UI substitute;
+§5 executor-liveness precheck), `doc/ha_devops_GUIDELINES.md` (`## Conventions`: both rules),
+and `.claude/skills/ha_devops/SKILL.md` (new lifecycle step 3 precheck, steps renumbered 3→6).
+**Durable gotcha (verified in `majordomus-daemon/src/serverHost.js` ~207, caught by /review):
+the :3101 executor has NO `GET /health` route** — it serves only `POST /api/ha/{execute,
+config-write}`, so `GET :3101/health` → 404 on a *healthy* executor. The liveness precheck
+therefore probes **reachability**, not a 200: `code=$(curl -s -o /dev/null -m 2 -w '%{http_code}'
+-X POST http://127.0.0.1:3101/api/ha/config-write)` — empty-body POST returns 400 before
+cap-token/HA I/O (zero side effects); **any HTTP code = UP, only `000` (refused/timeout) = DOWN**.
+(NB: 3100 Task-Router DOES serve `/health` — only 3101 lacks it.)
+
+**#4 STILL OPEN — end-to-end smoke test.** Blocked: the `:3101` daemon is **down** (probe = 000).
+To run: operator starts `node majordomus-daemon/bin/app.js`, then PM runs the §H1 confirm gate
+(mint confirm_id → Telegram APPROVE → dispatch benign `helper_create` to `ha_devops` w/ cap-token)
+→ verify a real audit entry lands in `fleet/ha_config_audit.jsonl`. `ha_devops` is launched/green;
+only the executor daemon needs starting. See [[ha-devops-hard-gate]].
+
+**Optional follow-up (deferred, operator's call):** add a real `GET /health → 200` route to
+`createHaExecutorServer` so liveness is a clean endpoint — source change, `/ha`+`/app`+rebuild;
+until then the reachability probe stands.
 
 **Open follow-ups:** run consolidation gate; §6 acceptance demos; companion whitelist
 `domain_defaults` additions (sensor/input_number→A); optional strip of 3 "NOT LiFePO4"
