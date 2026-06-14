@@ -62,6 +62,8 @@
 | `design/ha_config_write.md` | design | `/ha` | `/pm`, `/ha_devops` | Gated HA config-write (draft-disabled, human-enables); two-layer `/ha`+`ha_devops`; cap-token hard gate + body-scan + drift-safe undo. |
 | `ha_devops_GUIDELINES.md` | reference | `/ha_devops` | `/pm` | Durable guidelines for the runtime deployer; written via consolidation only. |
 | `runbooks/ha_deploy.md` | reference | `/ha_devops` | `/ha`, `/ops`, `/pm` | Operator runbook: launch `ha_devops`, deploy flow, enable-by-hand step, undo, W5 bring-up + W7 e2e. |
+| `design/federation.md` | design | `/ops` | `/pm` | Inter-PM federation client wiring + `fleet/fleet.config.json` registry schema (descriptive metadata; client resolves tokens via `--token-env`, not this file). |
+| `federation.md` | reference | `/ops` | `/pm` | Operator runbook: add a fleet, source `fleet.secrets.env`, connectivity check, grant management, multi-tenant `/health` notes. |
 
 ---
 

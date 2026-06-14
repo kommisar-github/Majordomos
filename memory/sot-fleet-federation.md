@@ -30,18 +30,40 @@ tokens; verify `grep -i trtok fleet/fleet.config.json` is empty):
 calls: `set -a; . fleet/fleet.secrets.env; set +a`. Operationally: `node
 .claude/mcp/task-router/client.js remote-{list-agents,read-guidelines,write-guidelines,execute}
 --url=http://192.168.1.111:3100 --project=<lower> --token-env=FED_TOK_<NAME>`.
+**Operator declined token rotation** (private LAN; tokens stay). Raw tokens stay out of git
+regardless — committing them was explicitly NOT done.
 
-**ROTATION PENDING (operator's plan = wire-now-rotate-after).** All 3 tokens were exposed in
-cleartext chat 2026-06-14, so re-mint each `pm` grant on its fleet, then swap the new values
-into `fleet/fleet.secrets.env`. Tokens are auth-healthy (no 401/403) — this is hygiene, not a fix.
+**KEY (verified by /review against client.js, 2026-06-14): `fleet.config.json` is descriptive
+metadata — NO code reads it.** `client.js` never parses it; federation tokens resolve only
+CLI-side via `--token-env=FED_TOK_<NAME>` (**bare** name; the `tokenRef:"env:FED_TOK_<NAME>"`
+in the file is a human pointer — the `env:` prefix is STRIPPED on the CLI; passing
+`--token-env=env:FED_TOK_<NAME>` fails). The `grant:"pm"` field = the grantee **agent**, NOT
+an access level; the level (RWE) is server-side, shown by `remote-list-agents` as `{"pm":"RWE"}`.
+`/health?project=` really does return `{version, tenants:N}` (SERVER_API.md). Don't conflate
+`fleet/fleet.config.json` (federation registry) with `.claude/mcp/task-router/fleet.json` (SoT identity).
 
-**DEFERRED (operator chose "federation handles only" first pass).** Full SoT bootstrap not yet
-done: Majordomus has NO `.claude/mcp/task-router/fleet.json` → not yet a `role=sot` enterprise
-fleet. To complete: `init.sh … --role=sot --enterprise-project=ent:home` (guidebook §3), then
-anti-distillation quota (§6: `TASK_ROUTER_DISTILL_QUOTA`), topic ownership (§7). For consumer
-fleets to read FROM the SoT, also bind non-loopback (`TASK_ROUTER_HOST`).
+**ROTATION: declined by operator** (private LAN). Tokens stay as-is in `fleet.secrets.env`.
 
-**OPEN doc task (/ops flagged).** `doc/federation.md` (ops Primary) doesn't exist — only a
-14-line `doc/design/federation.md`. The added `project` field + the lowercase/case-sensitivity
-rule should be consolidated into the schema doc via the PM→/review gate. See [[ha-devops-hard-gate]]
-for the federation-is-delegation / second-gate model.
+**SoT bootstrap DONE (2026-06-14).** `.claude/mcp/task-router/fleet.json` created (hand-authored
+because `init.sh` is destructive on this customized fleet — it needs `--force`, which overwrites
+all skills/agents.json/CLAUDE.md/matrix; NEVER run it here). Contents: `role:"sot"`,
+`enterprise_project_id:"ent:home"`, permanent `fleet_id:67f700a1-526f-4a28-b930-abd928e81797`,
+`seed_version:"4.13"`. Anti-distillation defaults set in gitignored `.env`
+(`TASK_ROUTER_DISTILL_QUOTA=60`, `TASK_ROUTER_DISTILL_WINDOW_MS=60000`; PM-grant callers unlimited).
+**Topic ownership (§7) NOT in v4.13 client** — deferred until a seed ships it AND there's canonical
+knowledge to own.
+
+**NETWORK BINDING — still loopback (127.0.0.1); operator DECISION PENDING.** Active-pull
+(Majordomus→fleets) works as-is. For the PASSIVE direction (fleets read FROM the SoT), bind
+non-loopback (`TASK_ROUTER_HOST=0.0.0.0`/LAN/Tailscale) + open 3100 for `/api/federation/*` only
+(owner endpoints + UI stay loopback, G3). /ops recommends Tailscale. Left commented in `.env` — do
+NOT enable without operator sign-off.
+
+**SoT KNOWLEDGE AGENTS — deferred by operator directive (2026-06-14):** define them AFTER gathering
+common knowledge from the federated projects (read across swarm/dragon-vlm/jetson-protect, find shared
+themes, THEN create the SoT knowledge-topic agents). Don't pre-create them.
+
+**Doc consolidation IN PROGRESS.** /ops drafted `doc/design/federation.md` (rewrite) + new
+`doc/federation.md` runbook + 2 matrix rows; /review REVISE'd (killed a tokenRef/grant/`env:`-prefix
+over-claim — see KEY above); /ops finalizing. See [[ha-devops-hard-gate]] for the
+federation-is-delegation / second-gate model.

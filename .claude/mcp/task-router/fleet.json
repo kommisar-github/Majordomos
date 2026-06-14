@@ -1,0 +1,8 @@
+{
+  "fleet_id": "67f700a1-526f-4a28-b930-abd928e81797",
+  "enterprise_project_id": "ent:home",
+  "role": "sot",
+  "seed_version": "4.13",
+  "created_at": "2026-06-14T10:00:00Z",
+  "_note": "Enterprise fleet identity. fleet_id is minted once and is permanent. Hand-authored (not via init.sh) to preserve custom skills/docs/agents.json on this already-bootstrapped fleet. Sent on federated calls so dev fleets (Swarm, Dragon-VLM, Jetson-Protect) register Majordomus as their SoT."
+}
