@@ -1,7 +1,7 @@
 # PM_TEMPLATES.md — Copy-Paste Templates
 
 **Companion to:** `PM.md` (concepts, setup guide, and architecture assessment)
-**Version:** 4.16 (2026-06-14)
+**Version:** 4.18 (2026-06-16)
 
 Each section below is a complete file template. Copy the indented content
 (removing the 4-space leading indent) to the path shown in the **Save as** line.
@@ -571,8 +571,13 @@ This is the master project rules file. Customize for your project.
     **PM smart routing — how `/pm <request>` works:**
     1. PM identifies the target agent from the request
     2. PM calls `list_agents(project=$TASK_ROUTER_PROJECT)` to check if the target is registered
-    3. **If registered** → Mode 4: `dispatch_task()` → hook notifies PM when done
-    4. **If not registered** → Mode 2: invoke via Skill tool (subagent fork)
+    3. **If registered as a FEDERATED agent** (`role:"federated-pm"` / carries a
+       `remote` block) → **Mode 4 federated**: `dispatch_task()` — the server
+       forwards over the federation gate to the remote PM. NEVER Mode 2. If the
+       remote link is down, the result mirrors back `remote_unreachable` →
+       **report the link is down**, do not fork.
+    4. **If registered as a local agent** → Mode 4: `dispatch_task()` → hook notifies PM when done
+    5. **If not registered (local agent)** → Mode 2: invoke via Skill tool (subagent fork)
 
     **Result notification — how PM learns agents are done:**
     When agents complete tasks, PM's `UserPromptSubmit` hook detects undelivered results.
@@ -860,6 +865,17 @@ Copy everything below (including the `---` YAML markers) into `.claude/skills/pm
     calls before they reach the remote PM. `remote-execute` long-polls the
     remote PM's result unless you pass `--no-wait`.
 
+    > **Prefer federated `dispatch_task` over the direct `remote-execute` verb.**
+    > The `remote-execute` client verb posts DIRECTLY from your terminal to the
+    > remote server, bypassing your LOCAL server — so there is **no local mirror
+    > task** (no busy/in-flight signal on the dashboard) and it is **not**
+    > server-to-server (MCP-to-MCP). For any **execution** request, register the
+    > peer as a federated agent and use `dispatch_task(to=<peer>)` instead: the
+    > forward goes server→server, a local task tracks it, and the card shows busy.
+    > Reserve the direct `remote-read-guidelines` / `remote-write-guidelines`
+    > verbs for one-off low-level doc reads/writes. Do **not** use `remote-execute`
+    > for routed work.
+
     ### Inbound Federated Requests — you are the gate
 
     When a task addressed to **you (`pm`)** has a payload that begins with
@@ -873,7 +889,11 @@ Copy everything below (including the `---` YAML markers) into `.claude/skills/pm
     fulfill the operation:
 
     - **read_guidelines** → return the current contents of
-      `doc/<agent>_GUIDELINES.md` as your result.
+      `doc/<agent>_GUIDELINES.md` as your result. **If a `doc/<agent>/` directory
+      ALSO exists** (a SoT "library" agent with a catalog + per-topic books),
+      append every `doc/<agent>/**.md` book after the catalog, each under a
+      `## <relative-path>` header. Return the catalog + books as **one** result —
+      it counts as a **single** federated read (one anti-distillation unit).
     - **write_guidelines** → update `doc/<agent>_GUIDELINES.md` per the payload.
       Back up the file first; **cite the external caller verbatim** in the
       commit message.
@@ -1124,6 +1144,15 @@ Copy everything below (including the `---` YAML markers) into `.claude/skills/pm
     ```
     Then invoke the specialist via the Skill tool (e.g., `/backend`).
 
+    **Mode 4 federated — target is a FEDERATED peer** (carries a `remote` block /
+    `role:"federated-pm"` / `status:"federated"`): route via **Mode 4 federated
+    dispatch** — `dispatch_task(to=<peer>)`, and the local server forwards over the
+    federation gate to the remote PM. A federated peer is **NEVER Mode-2-forked** —
+    there is no local skill to fork. If the peer is unreachable, the task mirrors back
+    `remote_unreachable` / `remote_disconnected`; **report the remote fleet link is
+    down** (name the peer + its URL), do not fall back to a fork. **Mode 2 (Agent
+    Fork) applies only to local specialists.**
+
     ### Dispatch Payload Convention
 
     When dispatching via **Mode 4 (MCP) or Mode 2 (Fork)**, format the payload
@@ -1159,6 +1188,16 @@ Copy everything below (including the `---` YAML markers) into `.claude/skills/pm
     2. **If TASK_ROUTER_AGENT is non-empty** (dedicated terminal):
        - **Registration is mechanical** (v0.7.0): the launcher already created your DB row before this prompt loaded. Do NOT call `register_agent` from your skill — that tool is now a no-op-equivalent of the REST registration the launcher already performed.
        - Call `list_agents(project=$TASK_ROUTER_PROJECT)` for the **recovery-summary roster only** — this snapshot races the watchdog's parallel registrations and can return a partial list. **Do NOT use it for routing the first dispatch.** Step 2 of every dispatch (including the first one of the session) re-lists.
+       - **Register federated peers** (one-time, mechanical): read
+         `.claude/mcp/task-router/agents.json`. For each entry whose `role` is
+         `"federated-pm"` (or that carries a `remote` block) and is NOT already in
+         the `list_agents` result, call
+         `register_agent(name=<entry-name>, project=$TASK_ROUTER_PROJECT, metadata={ remote: <its remote block verbatim> })`.
+         Federated peers have no terminal, so the mechanical launcher never
+         registers them — the PM does. Pass the roster `remote` block as-is
+         (`agent`/`grant`/`tokenRef` shorthand is fine); the server canonicalizes
+         it. This makes the peer dispatchable over federation **and** renders it as
+         a linked fleet (with a busy/in-flight signal) on the dashboard.
        - **Memory Recovery**: Call `load_memory(agent="pm")` to check for saved context.
          - If **no memories**: print `[PM] Ready — N agents online.`
          - If **memories exist**: run **Reconciliation** — load `dispatch_plan`, call `check_results(task_id)` for each in-flight task (max 10 tasks to save tokens), update wave statuses, present recovery summary, wait for user confirmation

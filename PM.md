@@ -2,7 +2,7 @@
 
 **Purpose:** Project-agnostic PM agent template. Copy into a new project and customize.
 **Creates:** `.claude/skills/pm/SKILL.md` + `.claude/rules/project.md` + `.claude/SKILLS.md` + `.claude/rules/INDEX.md` + MCP task router
-**Version:** 4.16 (2026-06-14)
+**Version:** 4.18 (2026-06-16)
 **Templates:** All copy-paste templates are in **`PM_TEMPLATES.md`** (companion file).
 
 ---
@@ -171,10 +171,11 @@ When the user says `/pm <request>`, PM auto-routes:
 
 1. **Identify** the target agent from the request (e.g., "design Phase 6" -> `/arch`)
 2. **Call `list_agents(project=$TASK_ROUTER_PROJECT)`** — mandatory before every dispatch, no exceptions, no cached lists
-3. **If agent is in the list** -> Mode 4: `dispatch_task()` via MCP, hook notifies PM when done
-4. **If agent is not in the list** -> Mode 2: invoke via Skill tool (subagent fork)
+3. **If the target is a FEDERATED peer** (`role:"federated-pm"` / carries a `remote` block) -> Mode 4 federated: `dispatch_task()` — the server forwards over the federation gate to the remote PM. **Never Mode 2.** If the remote link is down, the task mirrors back `remote_unreachable` -> report the link is down (don't fork). The Startup Sequence registers these peers; if one is missing, `register_agent` it from `agents.json` first, then dispatch.
+4. **If the (local) agent is in the list** -> Mode 4: `dispatch_task()` via MCP, hook notifies PM when done
+5. **If the (local) agent is not in the list** -> Mode 2: invoke via Skill tool (subagent fork)
 
-This means the same `/pm <request>` syntax works whether agents are running in terminals or not. PM adapts automatically.
+This means the same `/pm <request>` syntax works whether agents are running in terminals, not running, or are federated peers on another fleet. PM adapts automatically. **Mode 2 (Agent Fork) applies only to local specialists** — a federated peer is accessed over federation, never forked.
 
 ### Task Lifecycle (Mode 4)
 
