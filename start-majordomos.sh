@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# launcher-rev: 5   (bump when this template changes; the IDE auto-refreshes a project's
+# launcher-rev: 6   (bump when this template changes; the IDE auto-refreshes a project's
 #                    launchers when the bundled rev is higher — seedSync.ts. Absent = rev 0.)
 # start-Majordomos — launch the headless Task Router host for this project,
 # using the app bundled inside your installed Task Router extension. No per-project
@@ -34,8 +34,27 @@ set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_NAME="Majordomos"
 UI_PORT="${UI_PORT:-3200}"
-HOST="${TASK_ROUTER_HOST:-127.0.0.1}"        # router server bind (default local-only)
+HOST="${TASK_ROUTER_HOST:-127.0.0.1}"   # router server bind (default local-only)
 UI_HOST="${TASK_ROUTER_UI_HOST:-127.0.0.1}"  # dashboard bind (NO auth — trusted net only)
+
+# --- Config inherited from the IDE extension (taskRouter.* workspace settings) ---
+# The extension's launcher generator (seedSync.ts) BAKES the workspace settings into the
+# __PLACEHOLDERS__ below when it writes this file; the headless host can't read VS Code
+# settings at runtime. Each is still overridable at launch via its TASK_ROUTER_* env var.
+# See doc/runbooks/APP_STARTUP_SCRIPTS_GUIDEBOOK.md (the SoT for these scripts).
+export TASK_ROUTER_ERRATA_CHANNEL="${TASK_ROUTER_ERRATA_CHANNEL:-folder:/Users/akolesni/Work/claude-task-router-releases/errata}"
+export TASK_ROUTER_ERRATA_PUBKEY_PATH="${TASK_ROUTER_ERRATA_PUBKEY_PATH:-}"
+export TASK_ROUTER_CLAUDE_FLAGS="${TASK_ROUTER_CLAUDE_FLAGS:---dangerously-skip-permissions}"
+export TASK_ROUTER_MODEL_BY_ROLE="${TASK_ROUTER_MODEL_BY_ROLE:-{}}"
+export TASK_ROUTER_IDLE_SHUTDOWN="${TASK_ROUTER_IDLE_SHUTDOWN:-0}"  # 0 = always-on (headless contract)
+# Defensive: if a generator left a placeholder unsubstituted (still contains "__"),
+# fall back to the safe default so the App/server never receives a literal token.
+case "$HOST" in *__*) HOST="127.0.0.1";; esac
+case "$TASK_ROUTER_ERRATA_CHANNEL" in *__*) TASK_ROUTER_ERRATA_CHANNEL="disabled";; esac
+case "$TASK_ROUTER_ERRATA_PUBKEY_PATH" in *__*) TASK_ROUTER_ERRATA_PUBKEY_PATH="";; esac
+case "$TASK_ROUTER_CLAUDE_FLAGS" in *__*) TASK_ROUTER_CLAUDE_FLAGS="--dangerously-skip-permissions";; esac
+case "$TASK_ROUTER_MODEL_BY_ROLE" in *__*) TASK_ROUTER_MODEL_BY_ROLE="{}";; esac
+case "$TASK_ROUTER_IDLE_SHUTDOWN" in *__*|*[!0-9]*) TASK_ROUTER_IDLE_SHUTDOWN="0";; esac
 
 command -v node >/dev/null 2>&1 || { echo "node not found on PATH. Install Node.js >= 18." >&2; exit 1; }
 
