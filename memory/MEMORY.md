@@ -16,7 +16,7 @@ Canonical project facts (architecture, decisions, failure modes) belong in
 - [Battery SoH config-write](battery-soh-config-write.md) — AGM SoH calculator (Pass 2) deployed via gated config-write; operator HA-UI enable steps, executor lessons (object_id=numeric-not-slug, NEW-1 _isDeliberateCritical), Pass-2 audit-gap verdict (executeConfigWrite never called — process gap); remediation #1-#3 done (c2bc62c), #4 smoke test pending :3101 daemon start; KEY: :3101 has NO GET /health route — use empty-body POST reachability probe
 
 - [SoT fleet federation](sot-fleet-federation.md) — Majordomus = home SoT federated to 3 dev fleets (swarm/dragon-vlm/jetson-protect) on 192.168.1.131:3100; lowercase case-sensitive project ids, RWE pm grants, tokens in gitignored fleet.secrets.env (rotation pending), full SoT bootstrap deferred
-- [Fleet check before routing](fleet-check-before-routing.md) — operator feedback: re-call list_agents fresh before EVERY dispatch (never reuse startup snapshot); route bridge/fleet work through the owning bridge agent, not inline PM calls
+- [Fleet check before routing](fleet-check-before-routing.md) — operator feedback: re-call list_agents fresh before EVERY dispatch (never reuse startup snapshot); federated peers (v4.18) register at startup + dispatch over the gate (Mode 4 federated), NEVER fork or inline remote-execute
 - [Jetson SoT](../doc/sot/jetson_orin_baseline.md) — first SoT pass (2026-06-15): all 3 fleets on Orin Nano 8GB; cross-fleet canon at doc/sot/jetson_orin_baseline.md + per-fleet doc/<fleet>_GUIDELINES.md §"NVIDIA Jetson baseline"; committed 2d339ca
 
 ## Update protocol

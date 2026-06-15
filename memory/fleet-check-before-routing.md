@@ -25,12 +25,34 @@ before each `dispatch_task` and each `/pm ping`. Treat any in-context roster as
 expired. If I'm about to say "<agent> is offline," re-list first — that sentence
 is unearned until a fresh `list_agents` confirms it.
 
-**2. Route fleet/bridge work THROUGH the owning agent, not inline.**
-PM ran the federation `client.js remote-execute` calls itself instead of
-dispatching to the `/swarm` `/dragon-vlm` `/jetson-protect` bridges that own the
-relay + the per-fleet canon + `doc/<fleet>_GUIDELINES.md`. "No terminal by
-design" (bridges are fork-only) does NOT mean "PM does their job" — it means
-fork them. Consolidation drafts belong to the bridge; the `/review` gate and the
-commit are PM's.
+**2. Federated peers: dispatch over the gate (Mode 4 federated) — never fork, never inline `remote-execute`.**
+SUPERSEDED by seed erratum **v4.18** (applied 2026-06-16). The earlier rule
+("fork the `/swarm` `/dragon-vlm` `/jetson-protect` bridge skill to relay") is
+now WRONG for *execution/relay*. A `role:"federated-pm"` peer is reached
+MCP-to-MCP over the federation gate; it has no local skill to fork.
+
+**How to apply (v4.18):**
+- The peers are declared in `.claude/mcp/task-router/agents.json` with
+  `role:"federated-pm"` + a `remote` block. They have NO terminal, so the
+  launcher never registers them — **PM registers them at startup** (and any time
+  they're missing from `list_agents`):
+  `register_agent(name=<peer>, project=Majordomos, metadata={role:"federated-pm", remote:<roster block verbatim>})`.
+  The server canonicalizes the roster shorthand (`agent`/`grant`/`tokenRef:"env:X"`
+  → `target_agent`/`token_env`/`operation:"execute"`). Verified the VSIX
+  normalization IS installed on this host (2026-06-16).
+- To relay/execute: **`dispatch_task(to=<peer>, from="pm")`** — returns
+  `federated:true` + a LOCAL mirror task (busy/in-flight signal on the dashboard).
+  Then END the turn; result arrives via the `[TASK-ROUTER]` completion hook →
+  `collect_results`.
+- **Never** Mode-2-fork a federated peer. **Never** call `client.js remote-execute`
+  for routed work (it bypasses the local server → no mirror task). Reserve the
+  direct `remote-read-guidelines`/`remote-write-guidelines` verbs for one-off
+  low-level doc reads/writes only.
+- An unreachable peer mirrors back `remote_unreachable` → **report "remote link
+  down"** (name peer + URL); do NOT fork as a fallback.
+- The bridge skill still owns the per-fleet canon + `doc/<fleet>_GUIDELINES.md`;
+  consolidation drafts belong to it, the `/review` gate + commit are PM's. But
+  that ownership is about KNOWLEDGE, not the relay transport — the relay is the
+  gated `dispatch_task` above.
 
 See [[sot-fleet-federation]] for the federation wiring this applies to.
