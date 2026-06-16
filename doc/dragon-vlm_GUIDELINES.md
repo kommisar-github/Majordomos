@@ -24,7 +24,7 @@ dragon-vlm canon, what dragon-vlm does, dragon-vlm conventions, SoT knowledge ab
 
 **Owner:** `/dragon-vlm` (Primary per DOC_OWNERSHIP_MATRIX.md)
 **Related:** `doc/hw_lib_GUIDELINES.md`, `doc/hw_lib/jetson_orin.md`, `doc/hw_lib/realsense_d435.md`,
-`doc/design/federation.md`, `doc/federation.md`, `fleet/fleet.config.json`
+`FEDERATION_RULEBOOK.md` (federation policy SoT), `fleet/fleet.config.json`
 
 ---
 

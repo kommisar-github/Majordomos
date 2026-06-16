@@ -74,13 +74,13 @@ questions via `complete_task` and let PM relay.
 ## Your Context (load these first)
 
 `doc/design/DOC_OWNERSHIP_MATRIX.md` — always read first. Then:
-- **Dedicated terminal:** read `doc/design/federation.md` + `doc/design/host_ops.md` (your Primary docs) + the matrix.
+- **Dedicated terminal:** read `FEDERATION_RULEBOOK.md` (federation policy authority) + `doc/design/host_ops.md` + `doc/ops_GUIDELINES.md` (your Primary docs) + the matrix. The federation *wiring procedure* lives in **Domain Knowledge → Federation wiring procedure** below.
 - **Subagent fork:** matrix + cited docs.
 
 ## Owns (files)
-- `doc/federation.md`, `doc/host_ops.md` — federation wiring + macOS host runbook
+- `doc/design/host_ops.md` — macOS host runbook (federation *wiring procedure* lives in this skill's Domain Knowledge below; federation *policy* is `FEDERATION_RULEBOOK.md`, repo-shipped)
 - `host/launchd/com.majordomus.taskrouter.plist` — always-on
-- `fleet/fleet.config.json` (secret half) + `.env` / secrets handling
+- `fleet/fleet.config.json` (committed registry, env-var refs only) + `.claude/mcp/task-router/federation.env` / secrets handling
 - `host/provision.sh` — macOS preflight
 
 ## Never touches
@@ -88,13 +88,51 @@ questions via `complete_task` and let PM relay.
 - `doc/design/*` architecture authored by `/arch`
 
 ## Domain Knowledge
-- **Federation mint/grant:** on each **project**, `grant_access` mints `trtok_…` storing only its SHA-256 hash + a per-agent grant `{ pm: RO|RW|RWE }`; `list_access_grants`/`revoke_access` manage them (escalation-guarded, global-key gated).
-- **Federation client endpoints** (Majordomus is the client): `/api/federation/list_agents` (discover), `/api/federation/request` (mints a `to=pm` task with `[FEDERATED REQUEST]`), `/api/federation/wait` (token-scoped result poll). Ladder **RO < RW < RWE** = read-guidelines < write < execute.
-- **Per-project wiring:** each project's server binds `/api/federation/*` to the Tailscale/LAN interface; **owner endpoints + web UI stay loopback-only** (G3). Register via `task-router add-federation <name> <url> <token>` → `fleet.config.json`.
+- **Canonical authority (SoT):** `FEDERATION_RULEBOOK.md` (repo-shipped, at the project root) is the single source of truth for the federation policy (§1 access model, §5 security/least-privilege, §7 enterprise install). **This ops skill is the operational wiring layer** that implements it — read the rulebook for *whether/when/what-level*, follow the **Federation wiring procedure** below for *how*.
+- **Federation mint/grant:** on each **project**, `grant_access` mints `trtok_…` storing only its SHA-256 hash + a per-agent grant `{ pm: <level> }`; `list_access_grants`/`revoke_access` manage them (escalation-guarded, global-key gated).
+- **Access model (R/W/X lattice, not a ladder):** a level is a **set of capabilities** over R/W/X — RO={R}, RW={R,W}, XO={X}, RX={R,X}, RWX={R,W,X}. Operations map `read_file`→R, `write_file`→W, `execute`→X; access is **set membership**, not a linear ladder. (Legacy `RWE`=`RWX`; `read_guidelines`/`write_guidelines`=`read_file`/`write_file`.)
+- **Tooling preference:** route real work through `dispatch_task` / the `federated_*` MCP tools (the server forwards it and a local mirror task tracks it). Avoid the direct `remote-execute` client verb for routed work — it bypasses the local server (no tracking, bytes to stdout). Keep `remote-*` as a manual/diagnostic fallback only.
+- **Federation client endpoints** (Majordomus is the client): `/api/federation/list_agents` (discover), `/api/federation/request` (mints a `to=pm` task with `[FEDERATED REQUEST]`), `/api/federation/wait` (token-scoped result poll). These are the server-side mechanics behind the `federated_*` MCP tools above.
+- **Per-project wiring:** each project's server binds `/api/federation/*` to the Tailscale/LAN interface; **owner endpoints + web UI stay loopback-only** (G3). Register via `task-router add-federation <name> <url> <token>` → `fleet.config.json`. Tokens live in `.claude/mcp/task-router/federation.env` (gitignored, **server-read** — the canonical store; it may `include fleet/fleet.secrets.env`); commit only the env-var name (`tokenRef`).
 - **Tailscale** (recommended) puts the fleet on a private mesh — no internet exposure; else LAN-bind + `TASK_ROUTER_API_KEY` + TLS/SSH-tunnel.
 - **launchd:** a `LaunchAgent` plist with `KeepAlive` (restart on crash) + `ThrottleInterval` (no hot-loop); load via `launchctl bootstrap gui/$(id -u) <plist>`. A **bounded periodic restart** caps PM context growth (safe: compaction-resume + DB-authoritative `pickup_next_task`).
 - **G1 headless auth:** `claude` must be non-interactively authenticated (`ANTHROPIC_API_KEY` or stored credential); `provision.sh` asserts `claude --version` runs unattended before launchd is enabled.
-- Pitfall: a federated call uses the **token**, which bypasses the global key by design — a leaked token == project access. Treat the resolved-token half of `fleet.config.json` as a credential (gitignored).
+- Pitfall: a federated call uses the **token**, which bypasses the global key by design — a leaked token == project access. The canonical token store is the gitignored, server-read `.claude/mcp/task-router/federation.env` (it may `include fleet/fleet.secrets.env`); never inline/commit/log a token — commit only the env-var name (`tokenRef`).
+
+## Federation wiring procedure
+
+> The operational *how-to* for wiring a remote fleet into Majordomus (the policy
+> SoT is `FEDERATION_RULEBOOK.md`). Endpoints are **never hardcoded here** — the
+> concrete `url`/`project` live in `fleet/fleet.config.json` (one server today is not
+> forever). Treat every `<url>` / `<host>` / `<NAME>` below as a placeholder.
+
+**1. Add a fleet entry** to `fleet/fleet.config.json` (`{ "fleets": [ … ] }`):
+```json
+{ "name": "<DisplayName>", "url": "http://<host>:3100", "project": "<lowercase-id>", "grant": "pm", "tokenRef": "env:FED_TOK_<NAME>" }
+```
+- `project` is **lowercase, case-sensitive** (title-case → HTTP 404 `project_not_registered`); confirm exact casing with the fleet owner.
+- `tokenRef` is a **human pointer** (env-var name) only — the committed file holds **no** raw token. Invariant: `grep -i trtok fleet/fleet.config.json` returns empty.
+- `grant: "pm"` names the **local grantee agent**, NOT an access level (the level is server-side).
+
+**2. Sink the token** (PM does this; ops never writes raw tokens): the remote owner mints a `trtok_…` out-of-band → store it in the canonical, server-read `.claude/mcp/task-router/federation.env` (it may `include fleet/fleet.secrets.env`).
+
+**3. Verify connectivity** (diagnostic — one of the few sanctioned `remote-*` uses; routed work goes via `dispatch_task` / `federated_*`):
+```bash
+set -a; . .claude/mcp/task-router/federation.env; set +a
+node .claude/mcp/task-router/client.js remote-list-agents --url=<url> --project=<lowercase-id> --token-env=FED_TOK_<NAME>
+```
+Pass the **bare** var name (`--token-env=FED_TOK_<NAME>`, NOT `env:FED_TOK_<NAME>`). Expect `{"ok":true,"result":{"project":"<id>","agents":{"pm":"<level>"}}}`.
+
+| Outcome | Meaning |
+|---|---|
+| `ok:true` + agents | reachable, token valid; `agents` shows grantee → server-side level |
+| 404 `project_not_registered` | wrong project id (check case) or project not started |
+| 401 / 403 | token invalid/revoked → request rotation |
+| refused / timeout | remote link down |
+
+**4. Rotation / revoke:** on rotation, update `federation.env` only (PM re-sinks; `fleet.config.json` unchanged — same env-var name). To drop Majordomus's access, ask the remote owner to `revoke_access` on their server.
+
+**5. Multi-tenant (one URL, many fleets):** disambiguate via the `project` field (`?project=<id>` on each call); each token is scoped to its own project (a token for one project can't read another); `curl -s <url>/health` returns `"tenants":N` for a sanity count.
 
 ## Task File Mode
 

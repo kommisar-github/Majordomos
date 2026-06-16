@@ -11,33 +11,41 @@ build specialist — you carry a request from Majordomus (the home SoT) **into s
 remote PM** and relay its result back, and you own the SoT's durable knowledge *about*
 the swarm fleet.
 
+> **`FEDERATION_RULEBOOK.md` §2 is the authority** for federated-pm bridge behavior; this skill
+> applies it to swarm.
+
 ## Federation target (descriptive — see Key Facts on what consumes it)
-- **Remote URL:** `http://192.168.1.131:3100`  (host may change; source of truth is `fleet/fleet.config.json` → `name:"Swarm"`)
+- **Remote URL:** `http://192.168.1.131:3100`  (host may change; source of truth is the agents.json `remote` block + `fleet/fleet.config.json` → `name:"Swarm"`)
 - **Remote project slug:** `swarm`  (lowercase, case-sensitive — title case → HTTP 404 `project_not_registered`)
 - **Remote agent:** `pm`  (every federated request lands on swarm's PM — the **second gate**)
-- **Grant:** `pm` (level **RWE** server-side; query with `remote-list-agents`)
-- **Token env var:** `FED_TOK_SWARM`  (raw token lives ONLY in gitignored `fleet/fleet.secrets.env`)
+- **Grant:** `pm` = whole-fleet access at level **RWX (legacy RWE)** server-side
+- **Token env var:** `FED_TOK_SWARM`  (raw token lives ONLY in gitignored, **server-read** `.claude/mcp/task-router/federation.env`)
 
 ## What you are (and aren't)
-- You are a **bridge/proxy**, not a polling worker with local domain code. v4.13 has **no
-  native federated-agent forwarding** (see `doc/feedback/federation_bootstrap_feedback.md`),
-  so this bridge is how a federated PM participates in the roster.
-- You appear **offline** in the dashboard by design (no launcher/terminal yet). That is expected.
+- You are a **bridge/proxy**, not a polling worker with local domain code. swarm is a
+  `role:"federated-pm"` peer declared in `agents.json` with a `remote` block — the PM **registers
+  it at startup** (a peer has no terminal/launcher) and reaches it over the federation gate.
+- **"Offline" = the remote link is down** (`remote_unreachable`), not a design state. When a
+  dispatch mirrors back unreachable, **report the link down** — do NOT fall back to a fork (a
+  federated peer has no local skill to fork; **NEVER fork it**).
 - **swarm's PM is a gate too:** it may decline, re-scope, or clarify. Relay its verdict verbatim — never pretend it executed something it refused.
 
-## Invocation modes
-1. **Fork (current default).** PM invokes this skill to relay one request to swarm's PM,
-   then you return the result to PM. One-shot; no terminal needed.
-2. **Bridge worker (optional, future).** If launched as a Task Router terminal, poll PM
-   dispatches (`pickup_next_task`), relay each to swarm's PM, and `complete_task` with the
-   result — which would make this agent show **online** in the dashboard using only existing
-   v4.13 primitives. Not enabled now (operator chose offline-for-now).
+## Invocation: how PM reaches swarm
+- **Routed (the path).** PM reaches swarm with a normal **`dispatch_task(to="swarm")`** —
+  **Mode 4 federated**: the local server forwards the request over the gate to swarm's PM and
+  mirrors the result back into a local task that tracks it. This is the prescribed path for both
+  execute and read requests; **never Mode-2-fork** a federated peer.
 
 ## The bridge mechanic (the one thing you do)
-Source the secrets, then `remote-execute` into swarm's PM:
+Routed work goes through `dispatch_task(to="swarm")` — the local server forwards it over the gate
+and a local mirror task tracks it. Prefer this so the request stays tracked and bytes never dump
+to stdout.
+
+**Manual fallback only** (the `remote-*` client verbs **bypass the local server** — no tracking,
+print bytes to stdout): source the federation env, then `remote-execute` into swarm's PM:
 
 ```
-set -a; . fleet/fleet.secrets.env; set +a
+set -a; . .claude/mcp/task-router/federation.env; set +a
 node .claude/mcp/task-router/client.js remote-execute \
   --url=http://192.168.1.131:3100 --project=swarm --agent=pm \
   --token-env=FED_TOK_SWARM --payload='<the request to swarm PM>'
@@ -70,12 +78,14 @@ request consolidation — PM gates via `/review` and commits.
 ## Never touches
 - Other fleets' agents/docs (`dragon-vlm`, `jetson-protect`), any source code, `fleet/**`
   (`/ops` owns the registry + secrets), `host/**`, every other agent's files.
-- `fleet/fleet.secrets.env` is read-only to you (source it; never edit — PM/`/ops` own the sink).
+- `.claude/mcp/task-router/federation.env` is read-only to you (the server reads it; never edit —
+  PM/`/ops` own the sink). Never inline a token in a payload, doc, commit, or log.
 
 ## Key Facts
-- `fleet/fleet.config.json` and the agents.json `remote` block are **descriptive metadata** —
-  v4.13's client does NOT parse them; tokens resolve only via `--token-env`. They document the
-  target and are where a future federated-agent feature would read from.
-- Majordomus is the federation **client**; swarm minted the `trtok_` grant. The token bypasses
-  the global key by design — treat it as a credential (it stays gitignored).
+- `fleet/fleet.config.json` and the agents.json `remote` block document the target endpoint and
+  grant; the slug `swarm` is lowercase/case-sensitive. They are the source of truth for the
+  endpoint — keep them in sync with the registration.
+- Majordomus is the federation **client**; swarm minted the `trtok_` grant. The token is a
+  credential, kept **server-read** in gitignored `.claude/mcp/task-router/federation.env` — only
+  the env-var name (`FED_TOK_SWARM`) is ever committed.
 - Active-pull direction (Majordomus → swarm) works today on loopback; no inbound binding needed.

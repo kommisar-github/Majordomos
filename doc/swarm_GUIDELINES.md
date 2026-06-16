@@ -27,8 +27,7 @@ ground-robot swarm, SoT knowledge about swarm.
 - Never record a federation token or `confirm_id` value here — they are credentials/secrets.
 
 **Owner:** `/swarm` (Primary per DOC_OWNERSHIP_MATRIX.md)
-**Related:** `doc/hw_lib_GUIDELINES.md`, `doc/hw_lib/jetson_orin.md`, `doc/design/federation.md`,
-`doc/federation.md`, `fleet/fleet.config.json`
+**Related:** `doc/hw_lib_GUIDELINES.md`, `doc/hw_lib/jetson_orin.md`, `FEDERATION_RULEBOOK.md` (federation policy SoT), `fleet/fleet.config.json`
 
 ---
 
@@ -219,7 +218,8 @@ Commands flow the reverse direction (dashboard → queen API → MQTT command to
 
 ## Cross-fleet & SoT relationships
 
-- **Federation:** swarm's fleet exposes `pm` over the task-router with a federated **RWE** grant;
+- **Federation:** swarm's fleet exposes `pm` over the task-router with a federated **RWX** grant
+  (whole-fleet access; legacy `RWE` = `RWX`);
   it has answered SoT gathers (Jetson hardware baseline + this full project canon).
 - **Shared baseline:** the Jetson Orin Nano / JP6.0 / L4T R36.2 / Ubuntu 22.04 stack is the
   cross-fleet common compute — contributed to the SoT Jetson canon (`doc/hw_lib/jetson_orin.md`).

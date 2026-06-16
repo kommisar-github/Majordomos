@@ -22,8 +22,7 @@ jetson-protect canon, what jetson-protect does, jetson-protect conventions, SoT 
 - Never record a federation token or `confirm_id` value here — they are credentials/secrets.
 
 **Owner:** `/jetson-protect` (Primary per DOC_OWNERSHIP_MATRIX.md)
-**Related:** `doc/hw_lib_GUIDELINES.md`, `doc/hw_lib/jetson_orin.md`, `doc/design/federation.md`,
-`doc/federation.md`, `fleet/fleet.config.json`
+**Related:** `doc/hw_lib_GUIDELINES.md`, `doc/hw_lib/jetson_orin.md`, `FEDERATION_RULEBOOK.md` (federation policy SoT), `fleet/fleet.config.json`
 
 ---
 

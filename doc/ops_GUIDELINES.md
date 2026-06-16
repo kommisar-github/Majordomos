@@ -21,7 +21,7 @@ consistency via `/pm audit`.
 - Secrets NEVER committed: `.env` / `fleet/*.secret.json` are gitignored; launchd plist `EnvironmentVariables` filled at provision time. Condensed rules: `.claude/rules/ops.md`.
 
 **Owner:** `/ops` (Primary per DOC_OWNERSHIP_MATRIX.md)
-**Related:** `.claude/skills/ops/SKILL.md`, `.claude/rules/ops.md`, `doc/federation.md`, `DOC_OWNERSHIP_MATRIX.md`
+**Related:** `.claude/skills/ops/SKILL.md` (Federation wiring procedure), `.claude/rules/ops.md`, `FEDERATION_RULEBOOK.md` (federation policy SoT), `DOC_OWNERSHIP_MATRIX.md`
 
 ---
 
