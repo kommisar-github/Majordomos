@@ -1,7 +1,7 @@
 # PM_TEMPLATES.md — Copy-Paste Templates
 
 **Companion to:** `PM.md` (concepts, setup guide, and architecture assessment)
-**Version:** 4.18 (2026-06-16)
+**Version:** 4.22 (2026-06-17)
 
 Each section below is a complete file template. Copy the indented content
 (removing the 4-space leading indent) to the path shown in the **Save as** line.
@@ -811,6 +811,11 @@ Copy everything below (including the `---` YAML markers) into `.claude/skills/pm
 
     See `doc/seed/AGENT_PROTOCOL.md` for the wire protocol underneath.
 
+    > **The canonical federation rules live in `FEDERATION_RULEBOOK.md`** (shipped with the seed, at the
+    > project root — the authority every project follows). Read it as the rulebook for *whether/when* to
+    > federate, the R/W/X access model, the federated-pm / federated-sot roles, SoT-agent obligations, and
+    > the security rules. The sections below are the PM's **operational how-to** that implements it.
+
     ### PM-to-PM (Federation) Dispatch
 
     For cross-machine PM-of-PMs orchestration, register a remote fleet's PM as a
@@ -886,38 +891,65 @@ Copy everything below (including the `---` YAML markers) into `.claude/skills/pm
     off-convention (say why in your result).
 
     Parse the header (`Caller`, `Requested agent`, `Operation`, `Payload`) and
-    fulfill the operation:
+    fulfill the operation. The three operations map to the **R / W / X**
+    capabilities (v1.5.0) the server already gated — file transfers move
+    **server-to-server through temp staging**, so the bytes never enter this task:
 
-    - **read_guidelines** → return the current contents of
-      `doc/<agent>_GUIDELINES.md` as your result. **If a `doc/<agent>/` directory
-      ALSO exists** (a SoT "library" agent with a catalog + per-topic books),
-      append every `doc/<agent>/**.md` book after the catalog, each under a
-      `## <relative-path>` header. Return the catalog + books as **one** result —
-      it counts as a **single** federated read (one anti-distillation unit).
-    - **write_guidelines** → update `doc/<agent>_GUIDELINES.md` per the payload.
-      Back up the file first; **cite the external caller verbatim** in the
-      commit message.
-    - **execute** → `dispatch_task(to="<agent>", …)` after any local
-      fine-tuning (inject the right Context docs), then return the specialist's
-      result.
+    - **read_file (R)** → a server-mediated FILE read. The payload is a small JSON
+      envelope `{ stage_handle, file }` (no bytes). **Copy** the requested file(s)
+      into `.claude/mcp/task-router/fed-stage/out/<stage_handle>/` with a SHELL copy
+      (`mkdir -p` then `cp` — do **NOT** read contents into your context): the catalog
+      `doc/<agent>_GUIDELINES.md` plus, if it exists, the `doc/<agent>/**.md` book tree
+      (or just the named `file`). Then `submit_result` with a one-line count. The
+      server streams the staged bytes to the caller. (Budgeted: one read = one
+      anti-distillation unit.)
+      *Legacy `read_guidelines` with no `stage_handle`* → old inline behavior: return
+      the catalog + book tree as one result.
+    - **write_file (W)** → a server-mediated FILE write. The caller staged file(s) at
+      `.claude/mcp/task-router/fed-stage/in/<stage_handle>/`. **Audit** them, then move
+      the appropriate ones into `doc/<agent>/` and **update the catalog**
+      `doc/<agent>_GUIDELINES.md`. Back up first; cite the external caller in the
+      commit. Use shell `mv`/`cp` — you need not read large files fully into context.
+    - **execute (X)** → `dispatch_task(to="<agent>", …)` after any local fine-tuning,
+      then return the specialist's result. **Read-only by default — do NOT persist any
+      change to the agent's GUIDELINES/books.** ONLY when the grant is **RWX** (the
+      directive says so) MAY you persist resulting knowledge, routed through your
+      `/review`-gated consolidation (back up; cite the caller). This review-gated write
+      is the internal "K" effect; XO/RX execute never persists.
 
     **Fleet requests — `Requested agent: pm (FLEET)`.** When the named agent is
     **you (`pm`)**, the caller holds a **fleet grant**: access to your **entire
-    roster**, not one specialist. Same RO/RW/RWE levels, fleet scope — and you are
-    still the gate (decline or scope down anything unsafe; say why):
+    roster**. Same R/W/X capabilities, fleet scope — and you are still the gate:
 
-    - **read_guidelines (RO)** → return data you **already hold**, aggregated across
-      the fleet (any agent's GUIDELINES, accumulated knowledge, current fleet/task
-      status). Read-only — do **not** start new work or dispatch tasks.
-    - **write_guidelines (RW)** → **initiate a knowledge update across the fleet**:
-      route the payload through your normal review-gated consolidation to the
-      relevant agents' GUIDELINES (back up; cite the caller). Knowledge capture only.
-    - **execute (RWE)** → **full fleet delegation**: carry out the payload by
-      dispatching to whichever agents are needed, and return the consolidated result.
+    - **read_file (R)** → return data you **already hold**, aggregated across the fleet
+      (any agent's GUIDELINES, accumulated knowledge, current status). Read-only.
+    - **write_file (W)** → accept the file/knowledge across the fleet via your
+      review-gated consolidation to the relevant agents' GUIDELINES (back up; cite).
+    - **execute (X)** → fleet delegation: dispatch to whichever agents are needed and
+      return the consolidated result. Persist knowledge only if the grant is RWX (via `/review`).
 
     Always attribute the external caller in your result, and complete the task
     normally (`submit_result` / `complete_task`) so the caller's federation
     long-poll resolves. Never expose an agent or doc the request didn't name.
+
+    ### Requesting files from a remote SoT (you are the caller)
+
+    A remote SoT agent you hold a grant on can be **registered** as a
+    `role:"federated-sot"` roster entry (the App's **"Add SoT agent"** does this — it
+    writes the `agents.json` block, stores the token in `federation.env`, and registers
+    it, so it shows as a 📚 card with its granted level). Once registered, **access it by
+    name**:
+
+    To pull a file, call the **`federated_read_file`** MCP tool with just
+    **`agent: "<registered-name>"`** (the tool resolves `url`/`project`/`token_env` from
+    the registration) — or pass them explicitly for an unregistered peer, plus optional
+    `file`. The bytes transfer **server-to-server into your temp staging**
+    (`.claude/mcp/task-router/fed-stage/in/`) — never into your context. The tool returns
+    the staged paths; **audit** them, then **move** them into **`doc/sot/<agent>/`** (the
+    canonical home for SoT-sourced files). To contribute a file back, call
+    **`federated_write_file`** (`agent`, `source_path`). For an **execute** (X) grant,
+    `dispatch_task(to="<registered-name>")` like any agent. Prefer these over the legacy
+    `remote-*` client verbs, which print bytes to stdout (into your context).
 
     ## Your Responsibilities
 
@@ -1190,8 +1222,8 @@ Copy everything below (including the `---` YAML markers) into `.claude/skills/pm
        - Call `list_agents(project=$TASK_ROUTER_PROJECT)` for the **recovery-summary roster only** — this snapshot races the watchdog's parallel registrations and can return a partial list. **Do NOT use it for routing the first dispatch.** Step 2 of every dispatch (including the first one of the session) re-lists.
        - **Register federated peers** (one-time, mechanical): read
          `.claude/mcp/task-router/agents.json`. For each entry whose `role` is
-         `"federated-pm"` (or that carries a `remote` block) and is NOT already in
-         the `list_agents` result, call
+         `"federated-pm"` or **`"federated-sot"`** (or that otherwise carries a
+         `remote` block) and is NOT already in the `list_agents` result, call
          `register_agent(name=<entry-name>, project=$TASK_ROUTER_PROJECT, metadata={ remote: <its remote block verbatim> })`.
          Federated peers have no terminal, so the mechanical launcher never
          registers them — the PM does. Pass the roster `remote` block as-is
