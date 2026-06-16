@@ -67,8 +67,8 @@ launchd/federation ops into one dumping-ground SKILL.md — slower loads, worse 
 
 **Context economy via the matrix.** Abstracts (~50 tokens) + `Context docs:` citations
 keep forks lean: an `ha` fork dispatched for a service-call task loads matrix +
-`doc/ha_integration.md` (≈ 30–40K) — not `doc/app_runtime.md` or `doc/federation.md`.
-A `ops` fork wiring a new project loads matrix + `doc/federation.md` only.
+`doc/ha_integration.md` (≈ 30–40K) — not `doc/app_runtime.md` or `FEDERATION_RULEBOOK.md`.
+A `ops` fork wiring a new project loads matrix + `.claude/skills/ops/SKILL.md` (Federation wiring procedure) only.
 
 **Relationship to default agents** (`PM.md` provides pm/arch/review/scm — kept
 structurally identical, project context injected):
@@ -119,7 +119,7 @@ check (`PM.md` → Reserved agent names): `app`/`ha`/`ops` are all clear.
 
 **Role:** coordinator · **Model:** (omit — 1M Opus) · **Capabilities:** architecture, api-design, phase-planning
 
-**Owns:** `doc/design/*.md` (authors/updates design docs: `app_runtime.md`, `ha_integration.md`, `federation.md`, `host_ops.md`)
+**Owns:** `doc/design/*.md` (authors/updates design docs: `app_runtime.md`, `ha_integration.md`, `host_ops.md`)
 **Context:** matrix first; dedicated → all design docs; fork → matrix + cited docs.
 **Never touches:** any `majordomus-daemon/src/**` (implementation is `app`/`ha`), `agents.json` (pm/ops), launchd plists (`ops`).
 **SKILL.md domain knowledge:**
@@ -198,12 +198,12 @@ check (`PM.md` → Reserved agent names): `app`/`ha`/`ops` are all clear.
 **Role:** specialist · **Model:** `claude-sonnet-4-6` · **Capabilities:** federation, networking, launchd, secrets, provisioning
 
 **Owns (files):**
-- `doc/federation.md`, `doc/host_ops.md` — federation wiring + macOS host runbook
+- `.claude/skills/ops/SKILL.md` (Federation wiring procedure), `doc/host_ops.md` — federation wiring + macOS host runbook
 - `host/launchd/com.majordomus.taskrouter.plist` — always-on
 - `fleet/fleet.config.json` (secret half: tokens) + `.env` / secrets handling
 - `host/provision.sh` — macOS preflight (node, claude auth check, Tailscale)
 
-**Context:** matrix first; dedicated → `doc/federation.md` + `doc/host_ops.md`; fork → matrix + cited.
+**Context:** matrix first; dedicated → `FEDERATION_RULEBOOK.md` + `.claude/skills/ops/SKILL.md` (Federation wiring procedure) + `doc/host_ops.md`; fork → matrix + cited.
 **Never touches:** app runtime (`app`), HA bridge (`ha`), `doc/design/*` architecture (authored by `arch`).
 **SKILL.md domain knowledge:**
 - **Federation mint/grant:** on each **project**, `grant_access` mints `trtok_…` storing only its SHA-256 hash + a per-agent grant `{ pm: RO|RW|RWE }`; `list_access_grants` / `revoke_access` manage them; escalation-guarded, global-key gated.
@@ -281,7 +281,6 @@ Paste into `doc/design/DOC_OWNERSHIP_MATRIX.md` per `PM_TEMPLATES.md → ## DOC_
 | `doc/plans/MAJORDOMUS_FLEET_PLAN.md` | design brief | /arch | /pm | Update when the fleet topology / HA-direction / authority model changes. |
 | `doc/design/app_runtime.md` | design | /app | /arch | Update when the supervisor/nudge/server-host contract changes. |
 | `doc/design/ha_integration.md` | design | /ha | /review | Update when HA transport, tools, or the inbound whitelist change. |
-| `doc/design/federation.md` | design | /ops | /pm | Update when a project is added/removed or a grant level changes. |
 | `doc/design/host_ops.md` | design | /ops | — | Update when the launchd policy, Tailscale topology, or preflight changes. |
 
 ### §6.2 — matrix Section 2 (cross-cutting load rules)
@@ -298,14 +297,14 @@ Paste into `doc/design/DOC_OWNERSHIP_MATRIX.md` per `PM_TEMPLATES.md → ## DOC_
 **TL;DR:** node-pty supervisor + in-process Task Router server host for the Majordomus PM.
 **Load when:** node-pty, pty, supervisor, nudge, watchdog, startServer, server-host, attach, 409, lock, bracket-paste, launchCommand, argv, unregister, green, Stop hook, claude spawn, majordomus-daemon, bin/app.js
 **Key facts:** one PM agent only; reuse startServer() in-process; attach if /health up; nudge ~10s; never while-true.
-**Owner:** /app   **Related:** doc/design/host_ops.md, doc/design/federation.md
+**Owner:** /app   **Related:** doc/design/host_ops.md, FEDERATION_RULEBOOK.md
 ```
 ```
 ## Abstract
 **TL;DR:** bidirectional Home Assistant bridge (REST/WS/MCP) with an inbound confirmation gate.
 **Load when:** home assistant, HA, entity_id, states, call_service, light, climate, script, notify, bearer token, long-lived token, websocket, subscribe_events, MCP server, MCP client, Assist, ha_get_state, ha_call_service, inbound, whitelist, confirmation, H1
 **Key facts:** REST first (states + services); WS for live state; MCP optional; inbound default-deny + Telegram confirm for destructive/cross-project.
-**Owner:** /ha   **Related:** doc/design/federation.md (inbound→dispatch), PM SKILL (mediation)
+**Owner:** /ha   **Related:** FEDERATION_RULEBOOK.md (inbound→dispatch), PM SKILL (mediation)
 ```
 ```
 ## Abstract
@@ -329,11 +328,11 @@ Paste into `doc/design/DOC_OWNERSHIP_MATRIX.md` per `PM_TEMPLATES.md → ## DOC_
 | Spawning/keeping the Majordomus PM alive, nudge loop, server attach | /app | `doc/design/app_runtime.md` |
 | Reading HA state / calling an HA service / lights-climate-scripts | /ha | `doc/design/ha_integration.md` |
 | HA-originated request / voice / Assist / inbound safety | /ha + /pm | `doc/design/ha_integration.md` |
-| Adding/removing a project, minting/rotating a federation token, grant level | /ops | `doc/design/federation.md` |
-| Dispatching work to a project's PM (status, run tests, etc.) | /pm | `doc/design/federation.md` |
+| Adding/removing a project, minting/rotating a federation token, grant level | /ops | `.claude/skills/ops/SKILL.md` (Federation wiring procedure) |
+| Dispatching work to a project's PM (status, run tests, etc.) | /pm | `FEDERATION_RULEBOOK.md` |
 | launchd / always-on / Tailscale / macOS preflight | /ops | `doc/design/host_ops.md` |
 | New design decision / cross-module boundary | /arch | the relevant `doc/design/*.md` |
-| Security/safety audit (HA gate, exposure, secrets, blast radius) | /review | `doc/design/ha_integration.md`, `doc/design/federation.md` |
+| Security/safety audit (HA gate, exposure, secrets, blast radius) | /review | `doc/design/ha_integration.md`, `FEDERATION_RULEBOOK.md` |
 | Commit / branch / PR | /scm | — |
 
 ---

@@ -4,7 +4,7 @@
 **TL;DR:** bidirectional Home Assistant bridge (MCP client outbound + inbound confirmation gate).
 **Load when:** home assistant, HA, entity_id, states, call_service, light, climate, script, notify, bearer token, long-lived token, websocket, subscribe_events, MCP server, MCP client, Assist, ha_get_state, ha_call_service, inbound, whitelist, confirmation, H1
 **Key facts:** Outbound via HA MCP Server (SSE); inbound default-deny + Telegram confirm for destructive/cross-project.
-**Owner:** /ha   **Related:** doc/design/federation.md, PM SKILL (mediation)
+**Owner:** /ha   **Related:** FEDERATION_RULEBOOK.md (federation policy SoT), PM SKILL (mediation)
 
 ---
 

@@ -79,7 +79,9 @@ common knowledge from the federated projects (read across swarm/dragon-vlm/jetso
 themes, THEN create the SoT knowledge-topic agents). Distinct from the bridge agents above. The gathering
 phase fills each bridge agent's `doc/<name>_GUIDELINES.md`. Next phase once committed.
 
-**Doc consolidation IN PROGRESS.** /ops drafted `doc/design/federation.md` (rewrite) + new
-`doc/federation.md` runbook + 2 matrix rows; /review REVISE'd (killed a tokenRef/grant/`env:`-prefix
-over-claim — see KEY above); /ops finalizing. See [[ha-devops-hard-gate]] for the
-federation-is-delegation / second-gate model.
+**Doc consolidation DONE (2026-06-17).** Federation is now governed by a single canonical SoT:
+`FEDERATION_RULEBOOK.md` (project root, seed-shipped via errata v4.21/v4.22 — R/W/X access model,
+federated-pm/federated-sot roles, SoT-agent obligations, security, §7 enterprise install). The
+operational wiring procedure lives in `.claude/skills/ops/SKILL.md` ("Federation wiring procedure").
+The former `doc/design/federation.md` + `doc/federation.md` were **removed** (folded into those two).
+See [[ha-devops-hard-gate]] for the federation-is-delegation / second-gate model.
