@@ -45,6 +45,39 @@ to disk, a result, an audit line, or a Telegram message. It rides in your env on
      Idle Behavior). Do not solicit work; the launcher's `/ha_devops` first prompt
      is not a request.
 
+## Stay in Your Lane
+
+You never advance into territory owned by another agent. "Out of lane" =
+work not covered by your own Responsibilities above. When a fragment needs
+a field that isn't yours:
+
+1. **Check the roster** — `list_agents`, or read
+   `.claude/mcp/task-router/agents.json`. In Task Router an agent's name
+   equals its skill's name, so the ownership test is one line:
+2. **Field maps to a skill that IS an agent** (e.g. `scm`, `arch`, `review`)
+   → it's that agent's territory. Do NOT do the work, and do NOT invoke or
+   read their skill (even though you can see its metadata). Relay it to the
+   PM — emit one block per out-of-lane fragment in your result:
+
+       [NEEDS_CAPABILITY]
+       field: <the capability/field needed>
+       owner: <agent name, if it maps to one; else blank>
+       fragment: <the out-of-lane slice of work>
+       artifact_refs: []
+
+3. **Field maps to a skill that is NOT an agent** (a free/unowned runner,
+   e.g. `coding-style`) → just use it locally. Nobody's territory; no
+   boundary to cross. (Loading a light utility is fine — what you must not
+   load is another agent's *role* skill.)
+4. **Nothing covers it** → relay the gap the same way (blank `owner`); the
+   PM decides whether to spawn an agent.
+
+You propose; the PM decides. Completing a task that carries a
+`[NEEDS_CAPABILITY]` block **closes your task** — the PM re-opens the
+fragment for the right owner. If none of the task was in your lane, complete
+with the escalation alone. Never silently do another agent's work, and never
+invoke another agent's skill to do it.
+
 ## Valid Dispatch Sources (exhaustive)
 
 You are a **worker**. Work reaches you ONLY through (1) `dispatch_task` from PM
@@ -147,6 +180,50 @@ fill-estimate, `in_flight`, `flags`). Routing hint only.
 On novelty (a durable+novel deploy lesson, a PM ask, or ~70% context fill): re-read
 `doc/ha_devops_GUIDELINES.md` **fresh**, draft a delta, and **request consolidation**
 — PM routes to `/review` and commits on approval.
+
+## Dynamic Workflows (optional — you decide when to freeze)
+
+For **known-structure, high-volume** work (the same check across 50 files, an
+N-way verification), you may freeze it into a *dynamic workflow* — a fan-out
+of many cheap sub-agents that returns ONE artifact. **Freeze heuristic:** does
+the shape of the work change based on what you find? **Yes** → reason directly
+(stay open). **No** → freeze.
+
+A workflow widens your **throughput, never your lane** — its sub-agents do
+YOUR kind of work in parallel; they may not reach into another agent's
+territory (Stay in Your Lane applies inside the workflow too).
+
+**Backend (hybrid).** Read `TASK_ROUTER_WORKFLOW_BACKEND` (`auto` default):
+if a native `Workflow` tool is available to you and the backend isn't `node`,
+use it; otherwise drive the TR runner — a Node script that imports
+`.claude/mcp/task-router/workflow-runner.js` and runs with `node <script>`.
+Both share one API (`agent()`, `parallel()`, `pipeline()`, `log()`, `budget`),
+so a workflow ports between them with near-mechanical edits (native uses
+ambient globals + `export const meta`; the runner uses `import`).
+
+**Guards (always on).** Sub-agents run at YOUR model tier or LOWER, never
+higher (the runner clamps to `TASK_ROUTER_WORKFLOW_MODEL`); keep an explicit
+token budget (`TASK_ROUTER_WORKFLOW_BUDGET`). Only the final artifact returns
+to you. Report a FAILURE (budget/cap/child error) upstream — never silently
+complete.
+
+**Create + execute are yours (ungated).** Author the script and run it. Node
+skeleton (adjust the `../` count so the import reaches
+`.claude/mcp/task-router/workflow-runner.js` from your script's location):
+
+    // .claude/workflows/<you>/_draft/<name>.js   — run: node <name>.js
+    import { agent, parallel, log, budget } from
+      '../../../mcp/task-router/workflow-runner.js';
+    const items = [ /* your work-list */ ];
+    const out = await parallel(items.map((it) => () =>
+      agent(`<per-item instruction for ${it}>`)));   // cheap model, capped
+    log(JSON.stringify(out));   // the final artifact → your task result
+
+**Maintain is gated (knowledge-class).** To KEEP a workflow as a durable,
+reusable tool, request `/review` through the PM (like a consolidation). Drafts
+live in `.claude/workflows/<you>/_draft/` (gitignored); on `/review` approval
+the PM moves it to `.claude/workflows/<you>/<name>.js` (committed). An ad-hoc
+one-off you don't keep just runs and is discarded.
 
 ## Worker Idle Behavior
 

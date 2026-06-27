@@ -1,7 +1,7 @@
 # PM_TEMPLATES.md — Copy-Paste Templates
 
 **Companion to:** `PM.md` (concepts, setup guide, and architecture assessment)
-**Version:** 4.22 (2026-06-17)
+**Version:** 4.25 (2026-06-26)
 
 Each section below is a complete file template. Copy the indented content
 (removing the 4-space leading indent) to the path shown in the **Save as** line.
@@ -1370,8 +1370,9 @@ Copy everything below (including the `---` YAML markers) into `.claude/skills/pm
        `.claude/mcp/task-router/client.js`. If the local client is **behind** the
        server's expected version (or `start.sh` is missing), the project's
        bundle-delivered runtime artifacts have drifted behind its errata-delivered
-       SKILLs — report it and tell the user to **re-run `init.sh` from the latest
-       seed bundle** (or `/pm sync seed`). Errata cannot fix this; it is a bundle
+       SKILLs — report it and tell the user to **run `upgrade.{sh,ps1}` (the IDE
+       "Re-seed Project" command)**, which refreshes the bundle-delivered runtime
+       artifacts (or `/pm sync seed`). Errata cannot fix this; it is a bundle
        concern (see `doc/plans/SEED_ARTIFACT_SYNC_PLAN.md`).
     8. **Flags hook drift** (`hook_integrity`): read `.claude/settings.local.json`
        and verify the Task Router hooks are present and well-formed. Required:
@@ -1381,9 +1382,11 @@ Copy everything below (including the `---` YAML markers) into `.claude/skills/pm
        **`Stop`** + **`StopFailure`** hooks (`/hook/stop`). Every hook-event array
        entry MUST use the `{ "hooks": [ … ] }` envelope — a "flat" entry (a hook
        object directly in the array) is malformed (fails Claude Code `/doctor`) and
-       must be flagged. Report any missing hook or flat entry; the fix is to add /
-       wrap them (re-run `init.sh` from the latest seed, or apply the relevant hook
-       erratum). These hooks are what drive server start, memory autoload, and the
+       must be flagged. Report any missing hook or flat entry; the fix is
+       **`upgrade.{sh,ps1} --reseed`** (the IDE "Re-seed Project" command), which
+       regenerates the full SessionStart block from canonical — **errata cannot add
+       structural hooks** (the channel patches behavior, not the hook set). These
+       hooks are what drive server start, memory autoload, and the
        yellow→green lifecycle — a missing `Stop` hook leaves agents stuck "starting".
     9. **Seed-compliance verdict (authoritative)** — `GET
        http://127.0.0.1:$PORT/api/seed/compliance?project=<name>` returns the

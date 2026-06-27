@@ -258,7 +258,7 @@ async function main() {
   const args = parseArgs(argv.slice(1));
 
   if (!cmd || cmd === '--help' || cmd === '-h') {
-    process.stdout.write(`Task Router client ${PROTOCOL_VERSION}\nCommands: pickup, complete, dispatch, collect-results, list-agents, save-memory, load-memory, audit-report, stats\nFederation (caller): remote-list-agents, remote-read-guidelines, remote-write-guidelines, remote-execute\n  (need --url=<remote> --project=<remote-proj> [--agent=<agent>] and a token via --token / --token-env / TASK_ROUTER_FED_TOKEN)\nSee: doc/seed/AGENT_PROTOCOL.md\n`);
+    process.stdout.write(`Task Router client ${PROTOCOL_VERSION}\nCommands: pickup, complete, dispatch, collect-results, list-agents, save-memory, load-memory, audit-report, stats\nFederation (caller): remote-list-agents, remote-read-guidelines, remote-write-guidelines, remote-execute\n  (need --url=<remote> --project=<remote-proj> [--agent=<agent>] and a token via --token / --token-env / TASK_ROUTER_FED_TOKEN)\n`);
     process.exit(0);
   }
   if (cmd === '--protocol-version') {

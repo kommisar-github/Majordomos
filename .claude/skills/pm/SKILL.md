@@ -77,8 +77,6 @@ The client reads `TASK_ROUTER_AGENT`, `TASK_ROUTER_PROJECT`, and optional
 `TASK_ROUTER_BASE_URL` / `TASK_ROUTER_API_KEY` from the environment.
 Output is JSON to stdout: `{"ok": true|false, "result": …, "error": …}`.
 
-See `doc/seed/AGENT_PROTOCOL.md` for the wire protocol underneath.
-
 ### PM-to-PM (Majordomus) Dispatch
 
 For cross-machine PM-of-PMs orchestration, dispatch to a remote PM
@@ -691,6 +689,8 @@ Serialize concurrent requests — one GUIDELINES commit at a time. The
 `/review` verdict plus your commit are the provenance record. A `/pm
 consolidate <agent>` command runs this flow on demand.
 
+**Workflows are knowledge-class too.** When a specialist asks to KEEP a dynamic workflow (promote a draft from `.claude/workflows/<agent>/_draft/` to the durable, reusable library), run the **same gate**: dispatch the script to `/review` for a *static* audit (model ≤ tier? token budget? stays in lane? no recursion? sound?). On approve, **move** it to `.claude/workflows/<agent>/<name>.js` and commit; that move IS the adoption. Drafts stay gitignored. You dispatch *intent* and expect **one artifact** back — the specialist decides whether that intent becomes a workflow.
+
 ---
 
 ## File Results (`[FILE RESULT]`)
@@ -795,6 +795,26 @@ tasks, PM must present them to the user for triage — NOT auto-process them.
 | `/pm mcp register` | Register PM with task router | — |
 
 ---
+
+### Capability Escalations — a specialist relayed `[NEEDS_CAPABILITY]`
+
+When you collect results, scan each one for a `[NEEDS_CAPABILITY]` block (a
+specialist hit work outside its lane and relayed it — see the specialist
+"Stay in Your Lane" rule). For each block, **you decide** — you are not
+bound by the named `owner`:
+
+1. **Re-route (default)** — `dispatch_task` the `fragment` to the owning
+   agent (the `owner`, or whoever your roster says owns that field).
+2. **Spawn (user-gated)** — if no agent owns the field, propose a new
+   specialist via Agent Evolution (user approval required); don't widen any
+   agent's scope silently.
+3. **Authorize once** — if a round-trip isn't worth it, tell the requester
+   to handle it this one time, accepting the context cost.
+
+**Oscillation guard:** if the named owner *also* relays the same fragment
+back, do NOT re-route again — surface it to the user or propose a new agent.
+Record the decision in your dispatch plan. Never let an escalated fragment
+vanish: a task that completed carrying only an escalation is NOT done.
 
 ## Task Reconciliation (stuck `accepted` tasks)
 
