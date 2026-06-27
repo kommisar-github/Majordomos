@@ -25,13 +25,41 @@ tokens; verify `grep -i trtok fleet/fleet.config.json` is empty):
 **GOTCHA — project ids are case-sensitive + lowercase on the server.** Title case
 (`Swarm`) → HTTP 404 `project_not_registered`. Always use the lowercase `project` field.
 
-**Secrets.** Raw `trtok_` grants live ONLY in `fleet/fleet.secrets.env` (gitignored via
-`*secret*` + `*.env`; NEVER commit, NEVER put in a dispatch payload). Source before client
-calls: `set -a; . fleet/fleet.secrets.env; set +a`. Operationally: `node
+**Secrets — CANONICAL STORE = `.claude/mcp/task-router/federation.env` (updated 2026-06-28).**
+Consolidated: all four `FED_TOK_*` values (MULTI, SWARM, DRAGON_VLM, JETSON_PROTECT) now live
+**inline** in the gitignored, server-read `federation.env`; the `include fleet/fleet.secrets.env`
+line was **removed**, so the `fleet/*` layer is fully decoupled and legacy. `fleet/fleet.secrets.env`
+still exists (not deleted) but is no longer read by the canonical store — stale, retirement
+candidate. Source the canonical store (KEY=value, no `export` → needs `set -a`):
+`set -a; . .claude/mcp/task-router/federation.env; set +a`. Operationally: `node
 .claude/mcp/task-router/client.js remote-{list-agents,read-guidelines,write-guidelines,execute}
---url=http://192.168.1.131:3100 --project=<lower> --token-env=FED_TOK_<NAME>`.
-**Operator declined token rotation** (private LAN; tokens stay). Raw tokens stay out of git
-regardless — committing them was explicitly NOT done.
+--url=http://192.168.1.131:3100 --project=<lower> --token-env=FED_TOK_<NAME>`. NEVER commit, NEVER
+put a raw token in a dispatch payload.
+
+**TOKENS — all four VALID (verified 2026-06-28 by full liveness round-trip).** Earlier "stale
+2026-06-14 / rotation pending" worry for dragon-vlm + jetson-protect was WRONG — all four tokens
+authenticate at the gate AND complete a federated `remote-execute`. `FED_TOK_SWARM` was rotated
+2026-06-28 (fresh); `FED_TOK_DRAGON_VLM` / `FED_TOK_JETSON_PROTECT` are the original values and
+still work. No rotation needed for connectivity.
+
+**LIVENESS SNAPSHOT (2026-06-28, all via canonical federation.env):**
+- swarm — ALIVE (pm idle + telegram; no specialists up).
+- dragon-vlm — ALIVE (seed v4.26; 2/17 agents up, 15 idle/offline).
+- jetson-protect — **PM DOWN**: gate+token OK but `remote-execute` → HTTP 503 `pm_not_registered`
+  (no PM terminal running on the remote host; operator there must launch it). Gate probe
+  (`remote-list-agents`) still succeeds — it returns grant config without needing a live PM, so it
+  is NOT a liveness test; only `remote-execute` is.
+- Multi — ALIVE (prod v7.0.6; pm+telegram up, 6 on-demand specialists).
+- NOTE: dragon-vlm + Multi PMs echoed partial presented-token fragments in their replies — their
+  bug, not ours; flag to those owners. We do not store the fragments.
+
+**LIVE TOPOLOGY DRIFT (2026-06-28).** The registry `fleet/fleet.config.json` + the `agents.json`
+named peers (swarm/dragon-vlm/jetson-protect) are **stale**: the live federated peer registered
+this session is a single **`Multi`** project (`192.168.1.131:3100`, target `pm`, level RWX,
+`FED_TOK_MULTI`) — `fleet.config.json` has NO `Multi` entry and three dead named entries. Host is
+up (v1.7.3, 4 tenants). `/ops` recommends rewriting the registry to a single `Multi` entry; left
+untouched pending operator decision. swarm is reachable but NOT locally registered as a Mode-4 peer
+(reached via the manual `remote-execute` diagnostic path only).
 
 **KEY (verified by /review against client.js, 2026-06-14): `fleet.config.json` is descriptive
 metadata — NO code reads it.** `client.js` never parses it; federation tokens resolve only
