@@ -46,11 +46,11 @@ The PM agent (/pm) proposes new agents when it detects coverage gaps.
 You can also request: /pm propose an agent for <domain>.
 
 
-| app | `/app` | `majordomus-daemon/src/{serverHost,supervisor,launchCommand}.js`, `majordomus-daemon/bin/**` | node-pty supervisor + in-process server host | claude-sonnet-4-6 |
-| ha | `/ha` | `majordomus-daemon/src/ha-bridge.js`, `doc/ha_integration.md` | Home Assistant bidirectional bridge | claude-sonnet-4-6 |
-| ops | `/ops` | `host/**`, `fleet/**`, `doc/{federation,host_ops}.md` | Federation wiring, launchd, Tailscale, secrets | claude-sonnet-4-6 |
-| ha_devops | `/ha_devops` | *(no source)* — `doc/runbooks/ha_deploy.md` | HA config-write runtime deployer — **Mode-4-only, never fork** (`no_fork`) | claude-sonnet-4-6 |
-| hw_lib | `/hw_lib` | `doc/hw_lib_GUIDELINES.md`, `doc/hw_lib/**` | **SoT hardware-library curator** — catalog of per-platform hardware "books" (edge/embedded compute + attached sensors/MCUs) | claude-sonnet-4-6 |
+| app | `/app` | `majordomus-daemon/src/{serverHost,supervisor,launchCommand}.js`, `majordomus-daemon/bin/**` | node-pty supervisor + in-process server host | claude-sonnet-5 |
+| ha | `/ha` | `majordomus-daemon/src/ha-bridge.js`, `doc/ha_integration.md` | Home Assistant bidirectional bridge | claude-sonnet-5 |
+| ops | `/ops` | `host/**`, `fleet/**`, `doc/{federation,host_ops}.md` | Federation wiring, launchd, Tailscale, secrets | claude-sonnet-5 |
+| ha_devops | `/ha_devops` | *(no source)* — `doc/runbooks/ha_deploy.md` | HA config-write runtime deployer — **Mode-4-only, never fork** (`no_fork`) | claude-sonnet-5 |
+| hw_lib | `/hw_lib` | `doc/hw_lib_GUIDELINES.md`, `doc/hw_lib/**` | **SoT hardware-library curator** — catalog of per-platform hardware "books" (edge/embedded compute + attached sensors/MCUs) | claude-sonnet-5 |
 | swarm | `/swarm` | `doc/swarm_GUIDELINES.md` | **Federation bridge** → remote `swarm` PM (192.168.1.131:3100); holds SoT canon about swarm | *(federated-pm; offline)* |
 | dragon-vlm | `/dragon-vlm` | `doc/dragon-vlm_GUIDELINES.md` | **Federation bridge** → remote `dragon-vlm` PM; holds SoT canon about dragon-vlm | *(federated-pm; offline)* |
 | jetson-protect | `/jetson-protect` | `doc/jetson-protect_GUIDELINES.md` | **Federation bridge** → remote `jetson-protect` PM; holds SoT canon about jetson-protect | *(federated-pm; offline)* |

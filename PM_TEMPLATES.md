@@ -1,7 +1,7 @@
 # PM_TEMPLATES.md — Copy-Paste Templates
 
 **Companion to:** `PM.md` (concepts, setup guide, and architecture assessment)
-**Version:** 4.25 (2026-06-26)
+**Version:** 4.31 (2026-07-08)
 
 Each section below is a complete file template. Copy the indented content
 (removing the 4-space leading indent) to the path shown in the **Save as** line.
@@ -99,8 +99,8 @@ This is the project's documentation governance artifact. Every design, reference
 
     | Document | Type | Primary | Secondary | Notes |
     |---|---|---|---|---|
-    | `ROADMAP.md` | roadmap | `/pm` | all | Phase overview + status badges. PM must read before planning. |
-    | `NEXT_STEPS.md` | roadmap | `/pm` | all | Current action items. PM updates after each implement/verify cycle. |
+    | `ROADMAP.md` | roadmap | `/pm` | all | Phase overview + **full history (never pruned)**. PM **MUST** add/update an entry the **same turn** work is planned, shipped, or reversed — see PM.md → "ROADMAP / NEXT_STEPS maintenance". |
+    | `NEXT_STEPS.md` | roadmap | `/pm` | all | Live board of **active work only** — every item MUST trace to a ROADMAP entry, **none marked done** (done ⇒ moved to ROADMAP Recently-shipped, removed here). Same-turn update — see PM.md. |
     | `MEMORY.md` | memory | `/pm` | all | Project state — architecture facts, cross-cutting decisions. |
     | `DOC_OWNERSHIP_MATRIX.md` | reference | `/pm` | all | **This file.** |
     | `DESIGN_<FEATURE>.md` | design | `/<agent>` | `/<other>` | <one-line purpose> |
@@ -289,8 +289,8 @@ The template above is the blank shape. This section is a **filled-in exemplar** 
 
     | Document | Type | Primary | Secondary | Notes |
     |---|---|---|---|---|
-    | `ROADMAP.md` | roadmap | `/pm` | all | Phase overview + status badges. PM updates after each phase gate. **Source: `DETAILED_ROADMAP.md`** (two-doc split — this is the live status summary). |
-    | `NEXT_STEPS.md` | roadmap | `/pm` | all | Current action items. PM updates after each implement/verify cycle. |
+    | `ROADMAP.md` | roadmap | `/pm` | all | Phase overview + **full history (never pruned)**. PM **MUST** add/update an entry the **same turn** work is planned, shipped, or reversed — see PM.md → "ROADMAP / NEXT_STEPS maintenance". **Source: `DETAILED_ROADMAP.md`** (two-doc split — this is the live status summary). |
+    | `NEXT_STEPS.md` | roadmap | `/pm` | all | Live board of **active work only** — every item MUST trace to a ROADMAP entry, **none marked done** (done ⇒ moved to ROADMAP Recently-shipped, removed here). Same-turn update — see PM.md. |
     | `MEMORY.md` | memory | `/pm` | all | Project state — cross-phase decisions, architectural facts, lessons. PM writes after each phase completes. |
     | `DOC_OWNERSHIP_MATRIX.md` | reference | `/pm` | all | **This file.** Updated whenever a doc is added, renamed, or changes Primary owner — same commit. |
     | `PROJECT_DESCRIPTION.md` | reference | `/pm` | all | Project handoff / orientation doc for any new agent fork. Updated when architectural direction shifts. |
@@ -1968,6 +1968,7 @@ Copy everything below (including the `---` YAML markers) into `.claude/skills/pm
       the specialist's skill. Specialists do NOT carry `context: fork` in
       frontmatter — that flag breaks dedicated-terminal mode by stripping
       MCP tool access in the forked subagent.
+      `context:` quick reference — **no directive** = the skill loads inline in its terminal session (the Task Router default for agent-backed skills; isolation comes from the dedicated terminal itself). **`context: fork`** = an isolated subagent fork on every Skill-tool invocation — for **free-standing utility skills only** (no `agents.json` entry); never on an agent-backed skill. A native subagent under `.claude/agents/` (e.g. `peer-reviewer`) is a third thing: an ephemeral clean-room helper a skill spawns via the Agent tool — not a registered Task Router agent.
     - **PM is the orchestrator**: Both PM and specialists use
       `disable-model-invocation: false` so the skill loads when the extension
       launches the terminal with the agent name as the first prompt and the
@@ -2885,6 +2886,28 @@ Copy everything below (including the `---` YAML markers) into `.claude/skills/re
     restart (and never exists for a one-shot subagent). If it must outlive the
     session — code changes go to the **committed repo**; standing rules go to
     **GUIDELINES** via this flow.
+
+    ## Peer Review (second opinion on YOUR review)
+
+    You are not perfect — change-focused framing anchors you past untagged code. After your PRIMARY analysis and
+    before issuing the verdict below, spawn a clean-room `peer-reviewer` for an unbiased check ON your review —
+    but only when it earns its cost.
+
+    **Invoke when ANY of:** security-critical code path (privilege boundary, crypto, safety interlock) · your
+    verdict is uncertain / between tiers · your findings self-contradict · a deep review was explicitly requested ·
+    you have no prior review experience with this pattern. **Skip** trivial patches (doc edits, one-line bounds
+    checks) — break-even: *"would a missed bug here cause a security incident or hard-to-diagnose field failure?"*
+
+    **How (hybrid, native first):**
+    - If the native `Agent` tool is available, spawn the `peer-reviewer` subagent (`.claude/agents/peer-reviewer.md`)
+      with: the artifact, your COMPLETE findings, and "what did I miss?".
+    - Otherwise drive it via the TR runner — one `agent(prompt, { uncapped: true })` call in a throwaway script
+      importing `.claude/mcp/task-router/workflow-runner.js`, same payload. `uncapped` keeps it at YOUR tier,
+      not the cheap workflow ceiling.
+
+    It returns `{missed, overconfident, verdict, confidence}`. **Incorporate** its findings, then issue YOUR
+    single final verdict below — you own the verdict; the peer-reviewer only informs it. One-shot, no recursion;
+    for security-critical code prefer the native path.
 
     ## Review Output Format
 

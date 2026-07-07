@@ -551,7 +551,7 @@ After `collect_results` returns each agent's report, PM:
 1. Recomputes the same SHA-256 hashes on disk.
 2. Flags `skill_sha256` mismatch — agent's terminal is running a stale
    SKILL.md (the seed was updated since the agent loaded).
-3. Flags absence of the `## Memory Policy` block in any specialist SKILL.
+3. Flags absence of the `## Memory Policy` **or** `## Code Review` block in any specialist SKILL (both are canonical specialist blocks).
 4. Flags absence of the `## MCP Transport` block.
 5. Flags non-empty `stray_memory_files` (W2 violation).
 6. Flags missing `doc/<agent>_GUIDELINES.md`.
@@ -690,6 +690,18 @@ Serialize concurrent requests — one GUIDELINES commit at a time. The
 consolidate <agent>` command runs this flow on demand.
 
 **Workflows are knowledge-class too.** When a specialist asks to KEEP a dynamic workflow (promote a draft from `.claude/workflows/<agent>/_draft/` to the durable, reusable library), run the **same gate**: dispatch the script to `/review` for a *static* audit (model ≤ tier? token budget? stays in lane? no recursion? sound?). On approve, **move** it to `.claude/workflows/<agent>/<name>.js` and commit; that move IS the adoption. Drafts stay gitignored. You dispatch *intent* and expect **one artifact** back — the specialist decides whether that intent becomes a workflow.
+
+**Specialist feature CODE is review-class too.** Land-intended, non-trivial specialist code does not commit unreviewed - the mirror of the plan/design gate, applied at the code crossing.
+
+**Trigger** - any one: an agent's `state_brief` carries `needs-code-review` (or `workflow_produced` - those diffs CANNOT self-review, so always route them); or **you detect it** on `collect_results` (a collected result carries a consequential code deliverable), even if unflagged. Novelty, not volume - skip a one-line or doc-only change.
+
+**Gate (discrete tasks - never hold ONE task across review rounds):**
+1. **Dispatch the code to `/review`** as a NEW task (artifact refs / task_id). `/review` re-materializes the `git diff` itself and applies its code checklist, spawning `peer-reviewer` per its own criteria - clean-room by construction. Do not rely on any self-check the specialist ran; that is advisory only.
+2. **You own the disposition:** land / return-for-fix / waive-minor-and-land / escalate-to-user. Only correctness/requirement findings re-trigger a round; style findings land as follow-ups or a PM waiver.
+3. **Land = dispatch to `scm` WITH a review disposition** ("reviewed: pass" / "waived") - `/scm` refuses land-intended specialist code lacking it, so the commit is the enforced gate.
+4. **Bound it:** ~2 fix rounds (each a separate short task back to the specialist); if the same blocking finding survives a round, stop re-routing and **escalate to the user**. Record the round state in your `dispatch_plan` so a restart resumes it.
+
+A change that is BOTH a design (already `/review`-cleared) AND code still gets the code pass - **scoped** to implementation fidelity + correctness, NOT re-litigating the design. Never let a cleared design suppress the code review.
 
 ---
 
@@ -1085,6 +1097,7 @@ specialist:
   `doc/<agent>_GUIDELINES.md`, and only on explicit PM/user request.
   `save_memory` / `load_memory` MCP tools are server-managed runtime
   state, not free-form notes.
+- **`## Code Review`** - land-intended non-trivial code is review-class: the specialist flags it (`state_brief.flags: needs-code-review`) and PM routes it through the `/review` code gate before it commits. Without this block a code-producing specialist ships unreviewed.
 
 The `/pm audit` command (see PM Skill template) verifies both blocks
 are present in every specialist on the roster.

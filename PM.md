@@ -2,7 +2,7 @@
 
 **Purpose:** Project-agnostic PM agent template. Copy into a new project and customize.
 **Creates:** `.claude/skills/pm/SKILL.md` + `.claude/rules/project.md` + `.claude/SKILLS.md` + `.claude/rules/INDEX.md` + MCP task router
-**Version:** 4.25 (2026-06-26)
+**Version:** 4.31 (2026-07-08)
 **Templates:** All copy-paste templates are in **`PM_TEMPLATES.md`** (companion file).
 
 ---
@@ -266,6 +266,16 @@ Discriminator: do the phases themselves change often, or just the status? If onl
 - `doc/design/DOC_OWNERSHIP_MATRIX.md` — detailed design & implementation guide (problem, principles, token economics, adoption steps, ownership-transfer protocol, failure modes, trade-offs)
 - `doc/seed/CONSUMER_FEEDBACK.md` — anonymized log of feedback from prior seeding rounds (useful if you hit a friction point; the maintainer may already have context on it)
 
+**ROADMAP / NEXT_STEPS maintenance — MUST rules (same turn, no batching)**
+
+Whichever shape you chose above, these rules apply to whichever file(s) hold the phase list and the live status. `ROADMAP.md` is the complete, **never-pruned** ledger of all work — planned, in-flight, shipped, **and declined/reversed** (with outcomes); it is the audit trail **and** the planning memory that stops you re-litigating settled decisions. `NEXT_STEPS.md` is the live board of only what is being worked on right now.
+
+- **On planning work** — in the SAME turn: add a `ROADMAP.md` **Next/Backlog** entry (what · why · acceptance); if it's being dispatched now, add an active line to `NEXT_STEPS.md`.
+- **On completing work** — in the SAME turn: move/mark the `ROADMAP.md` entry under **Recently shipped** (date + version), bump the ROADMAP current-version header, and remove the item from `NEXT_STEPS.md` (its permanent record now lives in ROADMAP — nothing is lost).
+- **On reversing / declining / superseding** — record the outcome **on the existing `ROADMAP.md` entry**; never delete it. This is the anti-oscillation guarantee (see *Multi-source integration* below).
+- **Invariant:** every `NEXT_STEPS.md` item MUST trace to a `ROADMAP.md` entry — `NEXT_STEPS.md` is a live *view* of ROADMAP's active items, never a separate backlog. No `NEXT_STEPS.md` item is ever marked *done* — done means it moved to ROADMAP **Recently shipped** and was removed from `NEXT_STEPS.md`.
+- **Authority split** (why they never disagree): `ROADMAP.md` owns *what exists / shipped / decided* (durable); `NEXT_STEPS.md` owns *live status of active items* (ephemeral). An active item deliberately appears in both.
+
 ### Multi-source integration — detect opposing signals
 
 PM integrates input from multiple sources — feedback rounds on a doc, specialists proposing opposing conventions, design-doc drift between authors. Acting on each source in isolation produces **oscillation**: the artifact churns as each round reverses the previous one.
@@ -513,6 +523,18 @@ claude --agent <agent>_agent "/<agent>"     # FOREGROUND (not exec) so the trap 
 
 Put launcher scripts under a project dir like `host/` (git-tracked) so the roster path is stable.
 
+### Local-model backends
+
+An agent may run on a **local model** (LM Studio / OpenAI-compatible, e.g. a ~12B GGUF) instead of Claude —
+give its `agents.json` entry a `backend` block (`kind:"openai-compatible"`, `endpoint`, `model`,
+`api_key_env`). The seeded `local-runner.js` fulfils its tasks with one forced-`json_schema` call; it is
+fast, free, private, and offline-capable — but has a **hard capability envelope**.
+
+> **If any agent has a `backend` (or `harness`) block, read `PM_LOCAL_BACKENDS.md` before routing work to it.**
+> It carries the mandatory task-shaping contract (route by output SHAPE, bound input + output, keep
+> coding/abstract-reasoning on Claude, `/review` consequential outputs). It is loaded **lazily** — skip it
+> entirely when no local agent exists.
+
 ### Model Configuration
 
 Each agent can run on a different Claude model to optimize cost and quality. The principle: **use the strongest model for decision-making, cheapest for mechanical work.**
@@ -594,7 +616,7 @@ All copy-paste templates are in **`PM_TEMPLATES.md`**. Summary:
 | PM Skill Template | `.claude/skills/pm/SKILL.md` | Full PM agent: routing, delegation, reconciliation, evolution |
 | SCM Skill Template | `.claude/skills/scm/SKILL.md` | Git operations, commits, branches, PRs |
 | Architect Skill Template | `.claude/skills/arch/SKILL.md` | Phase design, architecture, component boundaries |
-| Architecture Review Skill Template | `.claude/skills/review/SKILL.md` | Adversarial audit of architect proposals |
+| Architecture Review Skill Template | `.claude/skills/review/SKILL.md` | Adversarial audit of architect proposals **and specialist code** (the code-review gate - PM routes land-intended code here before it commits) |
 | Task File Protocol | `.claude/tasks/README.md` | File format for Mode 3 task/result exchange |
 | Project Rule | `.claude/rules/project.md` | Global project rule: planning-only default, phase isolation |
 | SKILLS.md Template | `.claude/SKILLS.md` | Agent roster and usage guide (agent-system metadata) |

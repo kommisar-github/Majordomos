@@ -42,7 +42,7 @@
       "web-ui"
     ],
     "role": "specialist",
-    "model": "claude-sonnet-4-6"
+    "model": "claude-sonnet-5"
   },
   "ha": {
     "capabilities": [
@@ -53,7 +53,7 @@
       "safety-gate"
     ],
     "role": "specialist",
-    "model": "claude-sonnet-4-6"
+    "model": "claude-sonnet-5"
   },
   "ops": {
     "capabilities": [
@@ -64,14 +64,14 @@
       "provisioning"
     ],
     "role": "specialist",
-    "model": "claude-sonnet-4-6"
+    "model": "claude-sonnet-5"
   },
   "ha_devops": {
     "capabilities": [
       "ha-config-deploy"
     ],
     "role": "specialist",
-    "model": "claude-sonnet-4-6",
+    "model": "claude-sonnet-5",
     "no_fork": true,
     "launcher": "host/launch-ha-devops.sh"
   },
@@ -82,7 +82,7 @@
       "doc-updates"
     ],
     "role": "specialist",
-    "model": "claude-sonnet-4-6"
+    "model": "claude-sonnet-5"
   },
   "swarm": {
     "role": "federated-pm",

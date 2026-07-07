@@ -1,7 +1,7 @@
 ---
 name: ha_devops_agent
 description: "Launch persona for the privileged ha_devops config-write deployer terminal. Loaded via `claude --agent ha_devops_agent /ha_devops` by host/launch-ha-devops.sh. Loads the /ha_devops skill, which carries the full deploy lifecycle, the fork self-guard, and the cap-token contract."
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 ---
 
 # ha_devops launch agent

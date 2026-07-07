@@ -170,6 +170,16 @@ Your `complete_task` result is the durable DB record — **never empty**. Deploy
 outcome (op, applied, `audit_id`, disabled-status, enable-by-hand reminder) → inline.
 A file deliverable → a `[FILE RESULT]` reference, not inlined.
 
+## Code Review (land-intended code is review-class)
+
+Your feature CODE crosses a durable boundary the moment it is committed — so, like a design, it does **not** land unreviewed. This is a routing contract, not a self-certification: the authoritative, clean-room review is PM's `/review` pass, not anything you do to your own work.
+
+**When** (novelty, not volume — mirror Consolidation): you are returning **non-trivial new or changed code meant to LAND** (be committed / adopted) AND any of — it is security/correctness-critical · touches a shared / consumer / seed file · an unfamiliar pattern · or was produced by a dynamic-workflow fan-out (those sub-agents can't self-review). A one-line or doc-only change does **not** qualify.
+
+**How:**
+1. *(Optional, advisory)* self-check your own diff first — spawn a fresh sub-agent over the `git diff` (hand it ONLY the diff + criteria, never your transcript) and fold in what it finds. This is a cheap pre-filter to save a round-trip; it is **not** the gate and carries **no** landing authority. If you ran a dynamic workflow you **cannot** self-check (no nested sub-agents) — skip to step 2.
+2. **Flag it for PM** on `complete_task`: add `needs-code-review` to `state_brief.flags` (and `workflow_produced` if a workflow made it). Do **not** route yourself to `/review`, and do **not** commit land-intended code yourself (ask PM/`scm`) — PM orchestrates the review hop and owns the land decision.
+
 ## State Brief (attach to every completion)
 
 On every `complete_task`, attach a compact `state_brief` (`warm_on`, `context`
@@ -202,8 +212,9 @@ so a workflow ports between them with near-mechanical edits (native uses
 ambient globals + `export const meta`; the runner uses `import`).
 
 **Guards (always on).** Sub-agents run at YOUR model tier or LOWER, never
-higher (the runner clamps to `TASK_ROUTER_WORKFLOW_MODEL`); keep an explicit
-token budget (`TASK_ROUTER_WORKFLOW_BUDGET`). Only the final artifact returns
+higher — the runner caps them at your own model (`TASK_ROUTER_MODEL`);
+`TASK_ROUTER_WORKFLOW_MODEL` is an OPTIONAL override to cap cheaper. Keep an
+explicit token budget (`TASK_ROUTER_WORKFLOW_BUDGET`). Only the final artifact returns
 to you. Report a FAILURE (budget/cap/child error) upstream — never silently
 complete.
 
