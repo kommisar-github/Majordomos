@@ -1,0 +1,118 @@
+# Task Router — self-contained deploy (server + App, in-house agents only).
+# ONE image, TWO services: a durable `server` and an attaching `app` that shares the
+# server's network namespace (so the App reaches the server on 127.0.0.1 with no key).
+# See doc/plans/CONTAINER_DISTRIBUTION_PLAN.md and this dir's README.
+#
+# DB model: SINGLE SOURCE OF TRUTH — the server uses the project's OWN in-repo DB
+# ($TR_WORKSPACE/$TR_PROJECT/.claude/mcp/task-router/task-router.db), so both services mount
+# TR_WORKSPACE at the SAME host path (identical bind on `server` and `app`).
+# There is no separate/imported DB. RULE: run this project in exactly ONE place at a time
+# (this container OR a host IDE/App) — two servers writing one DB file corrupts it.
+# (Cloud-sync/FUSE workspaces where db.js's snapshot-rename fails: use the --db-dir override
+#  in doc/runbooks/CONTAINER_DEPLOY.md instead.)
+#
+# Required env (put in a .env beside this file — see .env.example; NEVER commit a real token):
+#   TR_IMAGE        the LOCAL image tag (e.g. task-router:<ver>) — `docker load` it from the release
+#                   tarball first; there is no registry (see doc/runbooks/CONTAINER_DEPLOY.md)
+#   TR_WORKSPACE    absolute host path to bind-mount at the SAME path in the container; the PARENT
+#                   holding your project at $TR_WORKSPACE/$TR_PROJECT (so symlinks the project makes
+#                   to siblings / one level up resolve inside the container). Project must be seeded.
+#   TR_PROJECT      the project/tenant name — matches .mcp.json ?project= AND the subfolder name
+#                   under TR_WORKSPACE (project root = $TR_WORKSPACE/$TR_PROJECT)
+#   CLAUDE_TOKEN    a Claude Code OAuth token (mint with: claude setup-token)
+#   UID, GID        host user's ids, so agent file writes to the repo land as you
+# Optional (same TASK_ROUTER_* names the IDE start scripts use; sensible defaults if unset):
+#   TASK_ROUTER_HOST (server bind, 127.0.0.1) · TASK_ROUTER_UI_HOST (dashboard bind, 0.0.0.0)
+#   TASK_ROUTER_ERRATA_CHANNEL (disabled) · TASK_ROUTER_IDLE_SHUTDOWN (0=always-on)
+#   TASK_ROUTER_CLAUDE_FLAGS · TASK_ROUTER_MODEL_BY_ROLE · TASK_ROUTER_API_KEY
+# Remote access (default both loopback-only): TR_UI_PUBLISH_HOST + TR_FED_PUBLISH_HOST (host publish binds),
+#   gated by TASK_ROUTER_UI_IP_ALLOWLIST / TASK_ROUTER_UI_ALLOWED_HOSTS (dashboard) and
+#   TASK_ROUTER_SERVER_IP_ALLOWLIST (federation). See CONTAINER_DEPLOY.md "Trust boundary".
+
+services:
+  server:
+    image: ${TR_IMAGE:?set TR_IMAGE to the task-router image ref}
+    # The server OWNS and WRITES the in-repo DB, so it MUST run as the host repo owner (same UID:GID
+    # as `app`) — otherwise its atomic DB write (task-router.db.tmp) hits EACCES. Set UID/GID in .env.
+    user: "${UID:-1000}:${GID:-1000}"
+    # ENTRYPOINT is `tini -- node`; this is the durable router server. Server-side TASK_ROUTER_*
+    # settings live HERE (the --attach-only App never spawns the server, so they'd be inert on it).
+    # Keep TASK_ROUTER_HOST=127.0.0.1 unless you publish :3100 for federation (the App reaches the
+    # server on loopback via the shared netns regardless).
+    # For remote FEDERATION set TASK_ROUTER_HOST=0.0.0.0 (bind all netns interfaces so the published :3100
+    # reaches the server; the App still connects on loopback). Non-loopback exposes ONLY /api/federation/*
+    # (trtok_-gated) + /health; register/pickup/etc. stay loopback-only.
+    command: ["server/bin/cli.js", "--host", "${TASK_ROUTER_HOST:-127.0.0.1}", "--idle-shutdown", "${TASK_ROUTER_IDLE_SHUTDOWN:-0}", "--errata-channel", "${TASK_ROUTER_ERRATA_CHANNEL:-disabled}"]
+    environment:
+      TASK_ROUTER_API_KEY: "${TASK_ROUTER_API_KEY:-}"   # optional REST/MCP key (loopback is trusted without one)
+      # Federation (:3100) client-IP allow-list — defense-in-depth over the trtok_ grants; loopback always
+      # allowed, inert when empty. Comma-separated exact IPs. Set it if you expose :3100.
+      TASK_ROUTER_SERVER_IP_ALLOWLIST: "${TASK_ROUTER_SERVER_IP_ALLOWLIST:-}"
+      # A writable HOME for a passwd-less runtime UID (else HOME defaults to / — unwritable), same as app.
+      HOME: "/tmp"
+    # BOTH surfaces publish here (the app can't declare ports:). Default host-loopback = remote-unreachable.
+    # To reach them from another machine, set the publish host to 0.0.0.0 or a specific LAN IP:
+    #   :3200 = dashboard/UI   ·   :3100 = server/federation (also needs TASK_ROUTER_HOST=0.0.0.0).
+    # An exposed surface MUST be gated by its IP allow-list (below) — see CONTAINER_DEPLOY.md "Trust boundary".
+    ports:
+      - "${TR_UI_PUBLISH_HOST:-127.0.0.1}:3200:3200"
+      - "${TR_FED_PUBLISH_HOST:-127.0.0.1}:3100:3100"
+    # The server owns the DB and writes it in-repo, so it mounts TR_WORKSPACE too — the SAME
+    # host==container path, IDENTICAL to `app` (so in-repo symlinks resolve the same on both).
+    volumes: ["${TR_WORKSPACE:?set TR_WORKSPACE to the parent dir to mount}:${TR_WORKSPACE}"]
+    networks: [trnet]                 # dedicated network — keep NO untrusted co-tenants on it
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3100/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+
+  app:
+    image: ${TR_IMAGE:?set TR_IMAGE to the task-router image ref}
+    network_mode: "service:server"    # share the server's loopback (NO ports:/networks: allowed here)
+    init: true                        # PID-1 zombie reaping for node-pty/claude grandchildren
+    user: "${UID:-1000}:${GID:-1000}" # match the host repo owner (git safe.directory + file writes)
+    restart: unless-stopped
+    # No --db-dir: the emitted dbPath is repo-relative ($TR_WORKSPACE/$TR_PROJECT/.claude/mcp/task-router/
+    # task-router.db), the in-repo DB the server (which mounts the same TR_WORKSPACE path) opens. Single SoT.
+    command: ["app/bin/app.js", "--attach-only", "--inhouse", "--project", "${TR_PROJECT:-myapp}=${TR_WORKSPACE}/${TR_PROJECT:-myapp}"]
+    # List form so the `claude` pass-through vars below can be KEY-only (forwarded ONLY when set in
+    # .env/shell — nothing is predefined). In-house agents inherit this container's env, so anything
+    # set here reaches the agents' `claude` process directly.
+    environment:
+      - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_TOKEN:-}
+      # App-side TASK_ROUTER_* settings (config.js reads them from env — same names the IDE start
+      # scripts bake in). Keep TASK_ROUTER_UI_HOST=0.0.0.0: the dashboard must bind all netns interfaces
+      # to receive the published :3200. Whether it's REACHABLE remotely is set by TR_UI_PUBLISH_HOST (server
+      # service); gate any exposure with the two allow-lists below. See CONTAINER_DEPLOY.md "Trust boundary".
+      - TASK_ROUTER_UI_HOST=${TASK_ROUTER_UI_HOST:-0.0.0.0}
+      # Dashboard (:3200) access control — the dashboard is UNAUTHENTICATED + RCE-grade. If you publish it
+      # beyond loopback you MUST set the client-IP allow-list (exact IPs; loopback always allowed) AND the
+      # Host allow-list (anti-DNS-rebinding). NOTE: the allow-list needs the REAL client IP — see the
+      # Docker source-IP caveat in CONTAINER_DEPLOY.md "Trust boundary" (native Linux Docker vs Desktop).
+      - TASK_ROUTER_UI_IP_ALLOWLIST=${TASK_ROUTER_UI_IP_ALLOWLIST:-}
+      - TASK_ROUTER_UI_ALLOWED_HOSTS=${TASK_ROUTER_UI_ALLOWED_HOSTS:-}
+      - TASK_ROUTER_CLAUDE_FLAGS=${TASK_ROUTER_CLAUDE_FLAGS:-}     # per-agent `claude` flags (default: --dangerously-skip-permissions)
+      - TASK_ROUTER_MODEL_BY_ROLE=${TASK_ROUTER_MODEL_BY_ROLE:-}   # role->model JSON (agents.json model wins)
+      # A WRITABLE HOME for the in-house `claude` agents. When `user:` is a host UID with no passwd
+      # row in the image, HOME would default to `/` (unwritable) and claude can't write ~/.claude.
+      # /tmp is world-writable+sticky, so this works for ANY uid (auth still comes from the token env).
+      - HOME=/tmp
+      # --- Optional pass-through to `claude` (verified names; see code.claude.com/docs/en/env-vars).
+      # KEY-only = forwarded ONLY if set in .env/shell; unset -> NOT defined in the container. ---
+      - ANTHROPIC_AUTH_TOKEN                       # custom `Authorization: Bearer` token (gateway/proxy auth)
+      - ANTHROPIC_BASE_URL                         # route to a proxy/gateway endpoint
+      - ANTHROPIC_CUSTOM_HEADERS                   # extra request headers ("Name: Value" per line)
+      - NODE_EXTRA_CA_CERTS                        # CA bundle path for corporate TLS inspection (PREFERRED)
+      - NODE_TLS_REJECT_UNAUTHORIZED               # =0 disables ALL TLS verification (blunt/insecure; prefer NODE_EXTRA_CA_CERTS)
+      - DISABLE_TELEMETRY                          # =1 opt out of telemetry
+      - CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC   # =1 disable autoupdater+telemetry+error-reporting+feedback
+    volumes: ["${TR_WORKSPACE:?set TR_WORKSPACE to the parent dir to mount}:${TR_WORKSPACE}"]
+    depends_on:
+      server:
+        condition: service_healthy
+
+networks:
+  trnet: {}

@@ -1,0 +1,11 @@
+# OPTIONAL compose override: mount your local Claude credentials into the App so in-house agents
+# authenticate WITHOUT a token. Use this only when CLAUDE_TOKEN in .env is empty.
+#
+# Copy to `creds.override.yml`, set the path to YOUR ~/.claude, and add `-f creds.override.yml` to the
+# compose command. HOME is /tmp in the app container, so claude reads creds at /tmp/.claude.
+#   Linux/macOS:  /home/<you>/.claude    or    $HOME/.claude
+#   Windows:      C:/Users/<you>/.claude
+services:
+  app:
+    volumes:
+      - "/absolute/path/to/your/.claude:/tmp/.claude"

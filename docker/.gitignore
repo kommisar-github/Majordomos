@@ -1,0 +1,4 @@
+# Never commit machine-specific deploy config — .env holds CLAUDE_TOKEN + local paths, and
+# *.override.yml holds machine paths (e.g. your ~/.claude). Only .env.example is tracked.
+.env
+*.override.yml
