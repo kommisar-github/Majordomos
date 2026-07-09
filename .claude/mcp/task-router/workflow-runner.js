@@ -23,8 +23,9 @@
  *       '../../.claude/mcp/task-router/workflow-runner.js';
  *
  * GUARDS (always on):
- *   - Model CEILING — sub-agents run at the specialist's tier or LOWER, never higher
- *     (env TASK_ROUTER_WORKFLOW_MODEL is the ceiling/default; a per-agent model is clamped to it).
+ *   - Model CEILING — sub-agents run at the SPECIALIST'S OWN tier (TASK_ROUTER_MODEL) or LOWER, never
+ *     higher. TASK_ROUTER_WORKFLOW_MODEL is an OPTIONAL override (cap cheaper); a per-agent model is
+ *     clamped to the ceiling. Neither set → --model omitted, so the child inherits the specialist's default.
  *   - Token BUDGET — env TASK_ROUTER_WORKFLOW_BUDGET (output tokens, default 200k); agent() throws past it.
  *   - CONCURRENCY cap — min(16, cpus-2).
  */
@@ -35,13 +36,18 @@ import os from 'node:os';
 
 const run = promisify(execFile);
 
-// --- tier ceiling (low → high). A per-agent model is clamped to the ceiling. ---
+// --- model ceiling: sub-agents run at the SPECIALIST'S OWN tier or LOWER, never higher ---
+// The ceiling is the specialist's own model (TASK_ROUTER_MODEL — the model it was launched with).
+// TASK_ROUTER_WORKFLOW_MODEL is an OPTIONAL explicit override (e.g. cap workflows cheaper than the
+// specialist). If neither is set (the specialist runs on the account default), the ceiling is unknown
+// and we omit --model entirely so the child inherits the SAME default as the specialist (= same tier).
 const TIER = { haiku: 1, sonnet: 2, opus: 3, fable: 3 };
 const tierOf = (m) => { const k = Object.keys(TIER).find((t) => String(m || '').includes(t)); return k ? TIER[k] : 2; };
-const CEILING = process.env.TASK_ROUTER_WORKFLOW_MODEL || 'claude-haiku-4-5';
+const CEILING = process.env.TASK_ROUTER_WORKFLOW_MODEL || process.env.TASK_ROUTER_MODEL || '';
 function clampModel(requested) {
-  if (!requested) return CEILING;
-  return tierOf(requested) > tierOf(CEILING) ? CEILING : requested;
+  if (!CEILING) return requested || '';                              // ceiling unknown → use requested, else omit --model
+  if (!requested) return CEILING;                                    // default sub-agent = same model as the specialist
+  return tierOf(requested) > tierOf(CEILING) ? CEILING : requested;  // a per-agent request is capped at the ceiling
 }
 
 // --- shared budget (output tokens) ---
@@ -90,7 +96,7 @@ export async function agent(prompt, opts = {}) {
       '-p', String(prompt),
       '--setting-sources', 'user',
       '--permission-mode', 'bypassPermissions',
-      '--model', model,
+      ...(model ? ['--model', model] : []),   // omit when the ceiling is unknown → child inherits the specialist's default
       '--output-format', 'json',
       '--disallowedTools', 'Agent',
     ], { env, timeout: Number(opts.timeoutMs || 600_000), maxBuffer: 32 << 20 });

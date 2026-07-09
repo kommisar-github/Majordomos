@@ -144,8 +144,9 @@ so a workflow ports between them with near-mechanical edits (native uses
 ambient globals + `export const meta`; the runner uses `import`).
 
 **Guards (always on).** Sub-agents run at YOUR model tier or LOWER, never
-higher (the runner clamps to `TASK_ROUTER_WORKFLOW_MODEL`); keep an explicit
-token budget (`TASK_ROUTER_WORKFLOW_BUDGET`). Only the final artifact returns
+higher — the runner caps them at your own model (`TASK_ROUTER_MODEL`);
+`TASK_ROUTER_WORKFLOW_MODEL` is an OPTIONAL override to cap cheaper. Keep an
+explicit token budget (`TASK_ROUTER_WORKFLOW_BUDGET`). Only the final artifact returns
 to you. Report a FAILURE (budget/cap/child error) upstream — never silently
 complete.
 

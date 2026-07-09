@@ -1,5 +1,5 @@
 # majordomos — Next Steps
-**Last Updated:** 2026-06-09
+**Last Updated:** 2026-07-08
 
 ## Abstract
 
@@ -26,3 +26,4 @@
 ## Backlog
 - [ ] **Q-HA-WHITELIST v3** — quiet-hours rules (vacuum/media after-hours), confirm-fatigue tuning, an audit log of every confirm decision, per-entity graduation of selected Tier-C items to Tier B by explicit operator opt-in (`doc/design/ha_whitelist_gate.md §8 v3`).
 - [ ] **Provision the always-on path** — run `host/provision.sh --inject-secrets` to populate the launchd plists (`com.majordomus.taskrouter.plist`, `com.majordomus.telegram.plist`) from `.env`, then `launchctl bootstrap`. (Templates + flow built; see `doc/design/host_ops.md`.)
+- [ ] **Local-model backend `/hacmd`** — wire a narrow local `backend` specialist on `google/gemma-4-12b-qat` for Telegram NL→HA command mapping. **Blocked on** `--reseed` (installs `local-runner.js`) + operator go. Spec + safety boundary in `doc/plans/LOCAL_MODEL_BACKEND_PLAN.md`; roadmap entry under Backlog → "Local-model backend specialist".

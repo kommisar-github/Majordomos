@@ -34,6 +34,17 @@
             "statusMessage": "Loading project memory (memory/MEMORY.md)..."
           }
         ]
+      },
+      {
+        "matcher": "compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -n \"$TASK_ROUTER_AGENT\" ]; then curl -sf \"http://127.0.0.1:3100/hook/restore?agent=$TASK_ROUTER_AGENT&project=$TASK_ROUTER_PROJECT\" 2>/dev/null; fi; true",
+            "timeout": 6,
+            "statusMessage": "Restoring context after compaction..."
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
@@ -84,6 +95,46 @@
               "TASK_ROUTER_AGENT",
               "TASK_ROUTER_PROJECT"
             ]
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:3100/hook/precompact",
+            "headers": {
+              "X-Task-Router-Agent": "$TASK_ROUTER_AGENT",
+              "X-Task-Router-Project": "$TASK_ROUTER_PROJECT"
+            },
+            "allowedEnvVars": [
+              "TASK_ROUTER_AGENT",
+              "TASK_ROUTER_PROJECT"
+            ],
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:3100/hook/compacted",
+            "headers": {
+              "X-Task-Router-Agent": "$TASK_ROUTER_AGENT",
+              "X-Task-Router-Project": "$TASK_ROUTER_PROJECT"
+            },
+            "allowedEnvVars": [
+              "TASK_ROUTER_AGENT",
+              "TASK_ROUTER_PROJECT"
+            ],
+            "timeout": 5
           }
         ]
       }

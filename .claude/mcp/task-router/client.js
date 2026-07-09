@@ -45,8 +45,85 @@
  */
 
 import http from 'node:http';
-import { URL } from 'node:url';
+import { URL, fileURLToPath } from 'node:url';
 import { readFileSync, existsSync } from 'node:fs';
+import path from 'node:path';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Enterprise Phase 0: this fleet's identity, written at bootstrap to fleet.json
+// beside this client. Sent on every federated call so the remote (SoT) records
+// us in its fleet registry. Absent file → plain federation (back-compat).
+function loadFleetIdentity() {
+  try {
+    const p = path.join(__dirname, 'fleet.json');
+    if (existsSync(p)) {
+      const f = JSON.parse(readFileSync(p, 'utf8'));
+      const out = {};
+      if (f.fleet_id) out.fleet_id = f.fleet_id;
+      if (f.enterprise_project_id) out.enterprise_project_id = f.enterprise_project_id;
+      if (f.role) out.fleet_role = f.role;
+      return out;
+    }
+  } catch { /* fleet.json is optional */ }
+  return {};
+}
+
+// A1: the fleet registry (`fleet/fleet.config.json`) — an array of
+// { name, url, grant, project, tokenRef } entries. `--fleet=<name>` resolves a
+// single entry into --url/--project/--token-env so federation calls don't repeat
+// three flags. Looked up relative to cwd first (calls run from the project root),
+// then relative to this client (.claude/mcp/task-router → ../../../fleet). The file
+// is descriptive-only otherwise; this is the one place the client consumes it.
+function loadFleetConfig() {
+  const candidates = [
+    path.join(process.cwd(), 'fleet', 'fleet.config.json'),
+    path.join(__dirname, '..', '..', '..', 'fleet', 'fleet.config.json'),
+  ];
+  for (const p of candidates) {
+    try {
+      if (existsSync(p)) {
+        const parsed = JSON.parse(readFileSync(p, 'utf8'));
+        // Accept either a bare array or { fleets: [...] }.
+        const list = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.fleets) ? parsed.fleets : []);
+        if (list.length) return { path: p, fleets: list };
+      }
+    } catch { /* malformed config → fall through to next candidate */ }
+  }
+  return { path: null, fleets: [] };
+}
+
+// Strip the documentary `env:` prefix some tokenRef values carry. The CLI wants the
+// BARE env-var name; `--token-env=env:FOO` would look up process.env['env:FOO'] →
+// undefined → silent 401. Tolerate both forms here so the gotcha can't happen.
+function stripEnvPrefix(name) {
+  const s = String(name || '');
+  return s.startsWith('env:') ? s.slice(4) : s;
+}
+
+// A1: if --fleet=<name> is given, fill in any unset --url/--project/--token-env from
+// the matching fleet.config.json entry. Explicit flags always win over the registry.
+function applyFleetAlias(args) {
+  if (!args.fleet) return;
+  const { path: cfgPath, fleets } = loadFleetConfig();
+  if (!fleets.length) {
+    throw new Error(`--fleet=${args.fleet} given but no fleet/fleet.config.json found (looked in ./fleet and the seed dir)`);
+  }
+  const want = String(args.fleet).toLowerCase();
+  const entry = fleets.find((f) => String(f.name || '').toLowerCase() === want
+    || String(f.project || '').toLowerCase() === want);
+  if (!entry) {
+    const names = fleets.map((f) => f.name || f.project).filter(Boolean).join(', ');
+    throw new Error(`--fleet=${args.fleet} not found in ${cfgPath}. Known fleets: ${names || '(none)'}`);
+  }
+  if (args.url === undefined && entry.url) args.url = entry.url;
+  if (args.project === undefined && entry.project) args.project = entry.project;
+  // tokenRef carries the env-var name (often prefixed `env:`); map to --token-env
+  // only when the caller hasn't already supplied a token.
+  if (args.token === undefined && args['token-env'] === undefined && entry.tokenRef) {
+    args['token-env'] = stripEnvPrefix(entry.tokenRef);
+  }
+}
 
 const PROTOCOL_VERSION = 'node/v4.6';
 const DEFAULT_BASE = 'http://127.0.0.1:3100';
@@ -191,9 +268,11 @@ async function mcpCall(baseUrl, project, sid, toolName, args, reqId) {
 
 function fedResolveToken(args) {
   if (args.token) return String(args.token);
-  const envName = args['token-env'] || 'TASK_ROUTER_FED_TOKEN';
+  // M2: tolerate a leading `env:` (the tokenRef convention) so --token-env=env:FOO
+  // and --token-env=FOO both resolve process.env.FOO instead of silently 401-ing.
+  const envName = stripEnvPrefix(args['token-env'] || 'TASK_ROUTER_FED_TOKEN');
   const v = process.env[envName];
-  if (!v) throw new Error(`federation token not found — pass --token=<trtok_...>, or --token-env=<ENV> (default TASK_ROUTER_FED_TOKEN)`);
+  if (!v) throw new Error(`federation token not found in env var "${envName}" — pass --token=<trtok_...>, or --token-env=<ENV> (default TASK_ROUTER_FED_TOKEN). Note: pass the BARE var name, not the "env:" prefix.`);
   return v;
 }
 
@@ -223,6 +302,28 @@ function fedPost(baseUrl, path, body, token) {
   });
 }
 
+function fedGet(baseUrl, path, token) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(path, baseUrl);
+    const headers = {
+      'Accept': 'application/json',
+      'x-task-router-client': PROTOCOL_VERSION,
+      'x-task-router-fed-token': token,
+    };
+    const req = http.request({ hostname: u.hostname, port: u.port, path: u.pathname + u.search, method: 'GET', headers }, (res) => {
+      const chunks = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('end', () => {
+        const raw = Buffer.concat(chunks).toString('utf8');
+        let json; try { json = JSON.parse(raw); } catch (e) { json = null; }
+        resolve({ status: res.statusCode, json, raw });
+      });
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
 // Issue one federated request and, unless --no-wait, long-poll the PM's result.
 async function fedRequestAndMaybeWait(args, operation, payloadText) {
   const url = args.url;
@@ -232,7 +333,7 @@ async function fedRequestAndMaybeWait(args, operation, payloadText) {
   if (!project) throw new Error('--project=<remote project> required');
   if (!agent) throw new Error('--agent=<remote agent> required');
   const token = fedResolveToken(args);
-  const r = await fedPost(url, `/api/federation/request?project=${encodeURIComponent(project)}`, { project, agent, operation, payload: payloadText || '' }, token);
+  const r = await fedPost(url, `/api/federation/request?project=${encodeURIComponent(project)}`, { project, agent, operation, payload: payloadText || '', ...loadFleetIdentity() }, token);
   if (r.status !== 200) return emit(false, null, `federation request HTTP ${r.status}: ${JSON.stringify(r.json || r.raw).slice(0, 300)}`);
   const taskId = r.json && r.json.task_id;
   if (!taskId) return emit(false, null, `no task_id in response: ${r.raw.slice(0, 200)}`);
@@ -258,7 +359,7 @@ async function main() {
   const args = parseArgs(argv.slice(1));
 
   if (!cmd || cmd === '--help' || cmd === '-h') {
-    process.stdout.write(`Task Router client ${PROTOCOL_VERSION}\nCommands: pickup, complete, dispatch, collect-results, list-agents, save-memory, load-memory, audit-report, stats\nFederation (caller): remote-list-agents, remote-read-guidelines, remote-write-guidelines, remote-execute\n  (need --url=<remote> --project=<remote-proj> [--agent=<agent>] and a token via --token / --token-env / TASK_ROUTER_FED_TOKEN)\n`);
+    process.stdout.write(`Task Router client ${PROTOCOL_VERSION}\nCommands: pickup, complete, dispatch, collect-results, list-agents, save-memory, load-memory, audit-report, stats\nEnterprise/SoT (owner): fleet-registry, set-topic-owner, list-topic-owners, analyze-demand\nFederation (caller): remote-list-agents, remote-projects, remote-read-guidelines, remote-write-guidelines, remote-execute\n  (need --url=<remote> --project=<remote-proj> [--agent=<agent>] and a token via --token / --token-env / TASK_ROUTER_FED_TOKEN)\n  remote-projects needs only --url + token (lists the remote's slugs to fix a project_not_registered 404)\n  shorthand: --fleet=<name> resolves --url/--project/--token-env from fleet/fleet.config.json\n`);
     process.exit(0);
   }
   if (cmd === '--protocol-version') {
@@ -269,6 +370,9 @@ async function main() {
   try {
     const project = process.env.TASK_ROUTER_PROJECT;
     const agent = args.agent || process.env.TASK_ROUTER_AGENT;
+    // A1: resolve a --fleet=<name> alias into --url/--project/--token-env before any
+    // command runs (no-op when --fleet is absent; throws cleanly on an unknown name).
+    applyFleetAlias(args);
 
     switch (cmd) {
       case 'pickup': {
@@ -393,12 +497,49 @@ async function main() {
         try { return emit(true, JSON.parse(r.raw)); } catch (e) { return emit(true, r.raw); }
       }
 
+      // --- Enterprise SoT-side (Phase 0/3): local owner ops against THIS server ---
+      case 'fleet-registry': {  // fleets that have federated into this SoT
+        const baseUrl = process.env.TASK_ROUTER_BASE_URL || DEFAULT_BASE;
+        const r = await getJson(baseUrl, `/api/fleet_registry?project=${encodeURIComponent(project || '')}`);
+        if (r.status !== 200) throw new Error(`/api/fleet_registry HTTP ${r.status}`);
+        try { return emit(true, JSON.parse(r.raw)); } catch (e) { return emit(true, r.raw); }
+      }
+      case 'analyze-demand': {  // recurring read topics -> candidates for active pull
+        const baseUrl = process.env.TASK_ROUTER_BASE_URL || DEFAULT_BASE;
+        const qs = `project=${encodeURIComponent(project || '')}&min=${encodeURIComponent(args.min || '3')}&since_ms=${encodeURIComponent(args['since-ms'] || '0')}`;
+        const r = await getJson(baseUrl, `/api/fleet_demand?${qs}`);
+        if (r.status !== 200) throw new Error(`/api/fleet_demand HTTP ${r.status}`);
+        try { return emit(true, JSON.parse(r.raw)); } catch (e) { return emit(true, r.raw); }
+      }
+      case 'list-topic-owners': {
+        const baseUrl = process.env.TASK_ROUTER_BASE_URL || DEFAULT_BASE;
+        const r = await getJson(baseUrl, `/api/topic_ownership?project=${encodeURIComponent(project || '')}`);
+        if (r.status !== 200) throw new Error(`/api/topic_ownership HTTP ${r.status}`);
+        try { return emit(true, JSON.parse(r.raw)); } catch (e) { return emit(true, r.raw); }
+      }
+      case 'set-topic-owner': {  // --topic=X --fleet-id=Y [--role=Z]
+        if (!args.topic) throw new Error('--topic=<topic> required');
+        const baseUrl = process.env.TASK_ROUTER_BASE_URL || DEFAULT_BASE;
+        const r = await postJson(baseUrl, '/api/topic_ownership', { project, topic: args.topic, fleet_id: args['fleet-id'] || null, role: args.role || null });
+        if (r.status !== 200) throw new Error(`set-topic-owner HTTP ${r.status}: ${r.raw.slice(0, 200)}`);
+        try { return emit(true, JSON.parse(r.raw)); } catch (e) { return emit(true, r.raw); }
+      }
+
       // --- v4.2 inter-PM federation (caller side) ---
       case 'remote-list-agents': {
         if (!args.url) throw new Error('--url=<remote base url> required');
         if (!args.project) throw new Error('--project=<remote project> required');
         const token = fedResolveToken(args);
-        const r = await fedPost(args.url, `/api/federation/list_agents?project=${encodeURIComponent(args.project)}`, { project: args.project }, token);
+        const r = await fedPost(args.url, `/api/federation/list_agents?project=${encodeURIComponent(args.project)}`, { project: args.project, ...loadFleetIdentity() }, token);
+        if (r.status !== 200) return emit(false, null, `HTTP ${r.status}: ${JSON.stringify(r.json || r.raw).slice(0, 300)}`);
+        return emit(true, r.json);
+      }
+      // A2: discover the remote's registered project slugs (no --project needed —
+      // this is how you find the correct lowercase slug after a 404).
+      case 'remote-projects': {
+        if (!args.url) throw new Error('--url=<remote base url> required');
+        const token = fedResolveToken(args);
+        const r = await fedGet(args.url, '/api/federation/projects', token);
         if (r.status !== 200) return emit(false, null, `HTTP ${r.status}: ${JSON.stringify(r.json || r.raw).slice(0, 300)}`);
         return emit(true, r.json);
       }
