@@ -15,6 +15,9 @@ fleet/ha_devops_session.json
 # with the project). sql.js writes a single self-contained file (no -wal/-shm), so it's
 # git-safe. Commit it at quiescent points if you want clean snapshots.
 .claude/mcp/task-router/*.bak-*
+.claude/mcp/task-router/.upgrade-backup-*/
+.claude/mcp/task-router/fed-stage/
 *.log
 node_modules/
 .seedsync-backup-*
+.DS_Store
