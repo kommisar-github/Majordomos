@@ -1,7 +1,7 @@
 # PM_TEMPLATES.md — Copy-Paste Templates
 
 **Companion to:** `PM.md` (concepts, setup guide, and architecture assessment)
-**Version:** 4.31 (2026-07-08)
+**Version:** 4.32 (2026-07-09)
 
 Each section below is a complete file template. Copy the indented content
 (removing the 4-space leading indent) to the path shown in the **Save as** line.

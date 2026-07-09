@@ -16,8 +16,10 @@ guarantees *format*, never *content* — a bounded schema is a safety control, n
 
 ## The capability envelope (measured)
 
-A ~12B local model was measured **at parity with a frontier cloud model** on the ✅ rows and **failed** on the
-❌ rows. Route by **output SHAPE**, not by topic:
+Two envelopes, by model tier. **A ~12B backend** (C-1) was measured **at parity with a frontier cloud model**
+on the ✅ rows below and **failed** the ❌ rows — route it by **output SHAPE**, not by topic. **A 31B-tier
+harness** (C-2) additionally clears **agentic coding** (see *The 31B harness envelope* below); the ❌ *Coding*
+row is a **~12B** limit, not a local-model limit.
 
 | Route to the local agent (✅) | Keep on Claude (❌) |
 |---|---|
@@ -75,6 +77,27 @@ harness agent to a capable model.**
 `api_key_env` is the env-var NAME, never the key. Security (SSRF allow-list on the *resolved* IP, redirect
 refusal, key non-exfil, child-env scrub) is enforced inside the runner. The harness CLI (`pi` / `opencode`)
 must be installed on the fleet host.
+
+### The 31B harness envelope (measured)
+
+A **dense 31B** driving Pi/OpenCode was measured **at frontier parity on agentic coding**: it passed an
+execution-graded coding suite — including a composite multi-step task that split the field — and completed
+real repo bug-fix / refactor tasks end-to-end through **both** Pi and OpenCode (tens of seconds each). Route
+to it:
+
+- **In-envelope (✅):** bounded agentic edits — a single-file or few-file bug-fix, a localized refactor, a
+  test-driven fix — where the change set and acceptance criteria are **scoped up front**.
+- **Still out (❌):** large multi-file features, cross-cutting redesigns, or any change where a
+  plausible-but-wrong diff is costly. **Architecture predicts reliability better than size** — sparser-MoE
+  and smaller models fail the composite task *silently* (confident and wrong) — so **gate every consequential
+  harness diff through `/review`** (rule 4); a clean `exit 0` from the CLI is not correctness.
+- **Pi vs OpenCode:** both are validated on a 31B — pick whichever CLI is installed on the fleet host
+  (`kind: "pi"` is the default, `kind: "opencode"` the alternative). The runner handles the CLI-specific
+  invocation and the security proxy; the PM just routes.
+- **Knowledge accumulation:** the model's window (≈90K on the measured 31B) comfortably holds a specialist's
+  accumulated session (typically tens of thousands of tokens), so a harness specialist can carry context
+  across its work — but **prefill latency scales with prompt size**, so keep each dispatch's input
+  shortlisted (rule 3). In this mode correctness and accumulation are the goal; latency is the accepted trade.
 
 ## `/pm audit`
 

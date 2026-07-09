@@ -1,5 +1,6 @@
 {
-  "seed_version": "4.31",
+  "seed_version": "4.32",
   "bootstrapped_at": "2026-06-07T18:51:47Z",
-  "_note": "Records the PM_TEMPLATES.md version this project was last bootstrapped from. The errata channel uses this to auto-ack errata whose applies_to_seed_versions range excludes this version. Re-run init.sh to bump after pulling a newer seed."
+  "runtime_synced_at": "2026-07-09T19:13:01Z",
+  "_note": "seed_version tracks seeded CONTENT and is advanced ONLY by the errata channel (each content erratum applies its delta + bumps this). upgrade.sh refreshes mechanical runtime files and stamps runtime_synced_at; it never advances seed_version. Bundle PM_TEMPLATES at last sync: 4.31. Run '/pm audit' then '/pm sync seed' to pull pending CONTENT updates."
 }
