@@ -2,7 +2,7 @@
 
 **Purpose:** Project-agnostic PM agent template. Copy into a new project and customize.
 **Creates:** `.claude/skills/pm/SKILL.md` + `.claude/rules/project.md` + `.claude/SKILLS.md` + `.claude/rules/INDEX.md` + MCP task router
-**Version:** 4.32 (2026-07-09)
+**Version:** 4.39 (2026-07-18)
 **Templates:** All copy-paste templates are in **`PM_TEMPLATES.md`** (companion file).
 
 ---
@@ -170,7 +170,7 @@ Mode 2 and 4 are **auto-selected** by PM's smart routing — no manual mode choi
 When the user says `/pm <request>`, PM auto-routes:
 
 1. **Identify** the target agent from the request (e.g., "design Phase 6" -> `/arch`)
-2. **Call `list_agents(project=$TASK_ROUTER_PROJECT)`** — mandatory before every dispatch, no exceptions, no cached lists
+2. **Call `list_agents(project=$TASK_ROUTER_PROJECT)`** — mandatory before every dispatch, no exceptions, no cached lists **When the target specialist is ambiguous (adjacent roles), consult each agent's `description`** (in the `list_agents` metadata) to choose the right one — not the name/capabilities alone.
 3. **If the target is a FEDERATED peer** (`role:"federated-pm"` / carries a `remote` block) -> Mode 4 federated: `dispatch_task()` — the server forwards over the federation gate to the remote PM. **Never Mode 2.** If the remote link is down, the task mirrors back `remote_unreachable` -> report the link is down (don't fork). The Startup Sequence registers these peers; if one is missing, `register_agent` it from `agents.json` first, then dispatch.
 4. **If the (local) agent is in the list** -> Mode 4: `dispatch_task()` via MCP, hook notifies PM when done
 5. **If the (local) agent is not in the list** -> Mode 2: invoke via Skill tool (subagent fork)
@@ -530,7 +530,10 @@ give its `agents.json` entry a `backend` block (`kind:"openai-compatible"`, `end
 `api_key_env`). The seeded `local-runner.js` fulfils its tasks with one forced-`json_schema` call; it is
 fast, free, private, and offline-capable — but has a **hard capability envelope**.
 
-> **If any agent has a `backend` (or `harness`) block, read `PM_LOCAL_BACKENDS.md` before routing work to it.**
+> **Before adding OR routing to a local-model agent, read `PM_LOCAL_BACKENDS.md`.** If any agent has a
+> `backend`/`harness` block, read it before routing work to it; and if you are **evaluating whether to add**
+> a local (C-1 backend / C-2 harness) agent, read it FIRST — it is the rulebook for creating and operating
+> one (envelope, `agents.json` block, resident-process obligations, capabilities to assign).
 > It carries the mandatory task-shaping contract (route by output SHAPE, bound input + output, keep
 > coding/abstract-reasoning on Claude, `/review` consequential outputs). It is loaded **lazily** — skip it
 > entirely when no local agent exists.

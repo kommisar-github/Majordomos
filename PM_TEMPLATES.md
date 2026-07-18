@@ -1,7 +1,7 @@
 # PM_TEMPLATES.md — Copy-Paste Templates
 
 **Companion to:** `PM.md` (concepts, setup guide, and architecture assessment)
-**Version:** 4.32 (2026-07-09)
+**Version:** 4.39 (2026-07-18)
 
 Each section below is a complete file template. Copy the indented content
 (removing the 4-space leading indent) to the path shown in the **Save as** line.
@@ -978,6 +978,7 @@ Copy everything below (including the `---` YAML markers) into `.claude/skills/pm
     - Continuously evaluate whether the current agent roster covers project needs
     - Propose new agents when gaps are detected (see Agent Evolution section)
     - Retire or merge agents that overlap or become redundant
+    - **Give every agent a rich `description`** in `agents.json` — one or two sentences that disambiguate it from adjacent agents (e.g. `arch` vs `review`, `backend` vs `devops`). It registers as `metadata.description` and is the routing-quality lever the coordinator consults when choosing a target; a roster with empty descriptions routes measurably worse. Write it to say what the agent OWNS and what it does NOT.
 
     ### Diagnostic discipline
 
@@ -1763,6 +1764,12 @@ Copy everything below (including the `---` YAML markers) into `.claude/skills/pm
        that requires specialized knowledge.
 
     ### How to Propose
+
+    **Local-model option:** before proposing a Claude-model specialist, consider whether the new agent's
+    tasks fit a **local model** — a C-1 `backend` (bounded classify/extract/tag/summarize) or a C-2
+    `harness` (scoped agentic coding on a dense ~31B). If so, read `PM_LOCAL_BACKENDS.md` FIRST and follow
+    its create-a-local-agent recipe instead of the Claude-skill steps below (a local agent needs only an
+    `agents.json` `backend`/`harness` block — no SKILL.md, rules file, or Startup Sequence).
 
     Output a **New Agent Proposal** block:
 

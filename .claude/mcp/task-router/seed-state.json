@@ -1,5 +1,5 @@
 {
-  "seed_version": "4.32",
+  "seed_version": "4.39",
   "bootstrapped_at": "2026-06-07T18:51:47Z",
   "runtime_synced_at": "2026-07-09T19:13:01Z",
   "_note": "seed_version tracks seeded CONTENT and is advanced ONLY by the errata channel (each content erratum applies its delta + bumps this). upgrade.sh refreshes mechanical runtime files and stamps runtime_synced_at; it never advances seed_version. Bundle PM_TEMPLATES at last sync: 4.31. Run '/pm audit' then '/pm sync seed' to pull pending CONTENT updates."
