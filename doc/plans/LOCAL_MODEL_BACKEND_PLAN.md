@@ -1,7 +1,7 @@
 # LOCAL_MODEL_BACKEND_PLAN — local Gemma backend specialist
 
-**Last Updated:** 2026-07-08
-**Owner:** `/pm` (Primary) · **Status:** PROPOSED (blocked on `--reseed` + operator go)
+**Last Updated:** 2026-07-18
+**Owner:** `/pm` (Primary) · **Status:** PROPOSED (runner artifacts present; blocked on launch wiring + operator go)
 
 ## Abstract
 
@@ -19,8 +19,8 @@ input+output, `/review` consequential outputs).
 **Key facts:**
 - Model: `google/gemma-4-12b-qat` (4-bit QAT, Q4_0) — the **quantized** build. The unquantized
   `google/gemma-4-12b` needs ~8.6 GB and will NOT load alongside the always-on daemon on this 16 GB Mac.
-- Endpoint: `http://127.0.0.1:1234/v1` (LM Studio, loopback, this host). `.132` is an AirPlay device, not a model host.
-- Runtime `local-runner.js` ships via VSIX/`--reseed` — **not present** in this Claude-only fleet yet.
+- Endpoint: `http://127.0.0.1:1234/v1` (LM Studio, loopback, this host). Note: `.132` is **this Mac's own `en1` interface** (`en0`=`.126`), not a separate device — the model host *is* this host, reached via loopback. (An `endpoint` may point at any reachable OpenAI-compatible URL; only the CLI-based harness runner must live on the fleet host.)
+- Runtime `local-runner.js` (resident-poll backend runner) **and** `harness-runner.js` **are present** in `.claude/mcp/task-router/` (synced 2026-07-09). The remaining blocker is the app/extension launch wiring (§5), not the runner artifacts.
 
 ---
 
@@ -48,6 +48,8 @@ Route by **output SHAPE** per `PM_LOCAL_BACKENDS.md`. For Majordomus specificall
 | Request → specialist routing (enum) | Any `/app` `/ha` **code**; `/arch` designs; `/review` verdicts |
 | Routine status summarization (<2000 chars, bounded) | Consolidation-gate judgments; the federation second-gate |
 | Inbound triage / tagging (capped vocabulary) | HA config-write confirm logic; anything where wrong-but-valid is costly |
+
+> **Note (v4.33+):** the code ❌ is a **model-capability floor**, not an absolute local-vs-Claude line — per the current `PM_LOCAL_BACKENDS.md`, coding needs a **dense ~31B**; a 12B (or a low-active-parameter MoE) fails, often *silently*. It stays ❌ for **this** 12B QAT backend; a larger dense local model could revisit it via the Agent-Evolution economic test.
 
 **The four shaping rules bind every routed task:** (1) whitelist by capability, (2) bound the OUTPUT
 schema (enums / typed scalars / `maxItems` / `maxLength`), (3) bound the INPUT (shortlist the entity
@@ -118,8 +120,10 @@ The local model **assists, it does not decide**. Even at 4/4 on the smoke test:
 
 ## 5. Wiring steps (in order)
 
-1. **`--reseed`** (or install ≥ the local-runner VSIX) to get `local-runner.js` (the resident-poll backend
-   runner) + app/ext launch wiring. `/pm audit` will report RE-SEED (seed file set grew 17→19) — expected.
+1. **Runtime present, launch wiring pending.** `local-runner.js` + `harness-runner.js` are already synced
+   into `.claude/mcp/task-router/`; what remains is the app/extension **launch wiring** that spawns the
+   runner as a resident poller (via the VSIX install or a `--reseed` of the runtime). Confirm the launcher
+   maps the `agents.json` backend block → runner process before relying on it.
 2. **Pin `google/gemma-4-12b-qat` as always-loaded** in LM Studio (JIT + keep-loaded) so it survives a
    restart and the daemon never races a cold load.
 3. **Add the `hacmd` block** to `.claude/mcp/task-router/agents.json` (§3). Add `LM_STUDIO_API_KEY` to the
